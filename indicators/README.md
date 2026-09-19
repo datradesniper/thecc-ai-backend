@@ -1,6 +1,6 @@
-# THECC Sentiment Pulse
+# THECC Sentiment Tide
 
-`THECC_Sentiment_Pulse.pine` — Pine Script **v6** indicator that merges three tools from the
+`THECC_Sentiment_Tide.pine` — Pine Script **v6** indicator that merges three tools from the
 walkthrough into one script with buy/sell signals, a stop loss and three targets at
 **1:1, 1:2 and 1:3** risk-to-reward.
 
