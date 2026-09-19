@@ -1,0 +1,322 @@
+//@version=6
+// ═══════════════════════════════════════════════════════════════════════════
+//  THECC SENTIMENT PULSE
+//  Average Sentiment Oscillator (ASO) + Stochastic + 5/8 EMA pullback filter
+//  Buy / Sell signals with SL and three targets at 1:1, 1:2 and 1:3 R:R.
+//
+//  ASO logic is the original "Average Sentiment Oscillator" by Kivanc Ozbilgic.
+//  Defaults follow the strategy walkthrough: ASO 34, Stoch 7/3/3, EMA 5/8.
+// ═══════════════════════════════════════════════════════════════════════════
+indicator("THECC Sentiment Pulse", shorttitle="THECC SP", overlay=false, max_lines_count=500, max_labels_count=500)
+
+// ─────────────────────────────────  INPUTS  ────────────────────────────────
+gS = "Market Sentiment (ASO)"
+asoLen  = input.int(34, "ASO Period", minval=1, maxval=100, group=gS,
+     tooltip="34 is the setting used in the strategy. The original indicator default is 10.")
+asoMode = input.int(0,  "Calculation Method  (0 = Both, 1 = Intrabar, 2 = Group)", minval=0, maxval=2, group=gS)
+
+gK = "Stochastic (trend-following trigger)"
+periodK   = input.int(7,  "%K Length",     minval=1, group=gK)
+smoothK   = input.int(3,  "%K Smoothing",  minval=1, group=gK)
+periodD   = input.int(3,  "%D Smoothing",  minval=1, group=gK)
+obLevel   = input.int(80, "Overbought",    minval=50, maxval=100, group=gK)
+osLevel   = input.int(20, "Oversold",      minval=0,  maxval=50,  group=gK)
+showStoch = input.bool(true, "Plot Stochastic in this pane", group=gK)
+
+gE = "EMA Ribbon (reversal pullback filter)"
+emaFastLen = input.int(5, "Fast EMA", minval=1, group=gE)
+emaSlowLen = input.int(8, "Slow EMA", minval=1, group=gE)
+showEma    = input.bool(true, "Plot EMAs on the price chart", group=gE)
+
+gM = "Signals"
+sigMode    = input.string("Both", "Strategy", options=["Trend Following", "Reversal", "Both"], group=gM,
+     tooltip="Trend Following = trade with the dominant sentiment using the Stochastic trigger.\nReversal = trade the ASO crossover after an EMA 5/8 pullback.")
+oneAtATime = input.bool(true, "Only one open setup at a time", group=gM)
+flipOnOpp  = input.bool(true, "Close the setup on an opposite signal", group=gM)
+
+gR = "Risk & Targets"
+slLookback = input.int(10,   "Pullback lookback for stop loss (bars)", minval=2, group=gR)
+atrLen     = input.int(14,   "ATR Length (stop buffer)", minval=1, group=gR)
+atrBuffer  = input.float(0.25, "Stop buffer (x ATR)", minval=0, step=0.05, group=gR)
+rr1        = input.float(1.0, "Target 1  (R:R)", minval=0.1, step=0.1, group=gR)
+rr2        = input.float(2.0, "Target 2  (R:R)", minval=0.1, step=0.1, group=gR)
+rr3        = input.float(3.0, "Target 3  (R:R)", minval=0.1, step=0.1, group=gR)
+projBars   = input.int(30,   "Draw levels forward (bars)", minval=1, group=gR)
+showLevels = input.bool(true, "Draw SL / TP levels on the chart", group=gR)
+showHits   = input.bool(true, "Mark target and stop hits", group=gR)
+showPanel  = input.bool(true, "Show info panel", group=gR)
+
+// ───────────────────────  AVERAGE SENTIMENT OSCILLATOR  ────────────────────
+intrarange = high - low
+grouplow   = ta.lowest(low, asoLen)
+grouphigh  = ta.highest(high, asoLen)
+groupopen  = open[asoLen - 1]
+grouprange = grouphigh - grouplow
+
+K1 = intrarange == 0 ? 1 : intrarange
+K2 = grouprange == 0 ? 1 : grouprange
+
+intrabarbulls = ((((close - low)      + (high - open))       / 2) * 100) / K1
+groupbulls    = ((((close - grouplow) + (grouphigh - groupopen)) / 2) * 100) / K2
+intrabarbears = ((((high - close)     + (open - low))        / 2) * 100) / K1
+groupbears    = ((((grouphigh - close) + (groupopen - grouplow)) / 2) * 100) / K2
+
+tmpBulls = asoMode == 0 ? (intrabarbulls + groupbulls) / 2 : asoMode == 1 ? intrabarbulls : groupbulls
+tmpBears = asoMode == 0 ? (intrabarbears + groupbears) / 2 : asoMode == 1 ? intrabarbears : groupbears
+
+bulls = ta.sma(tmpBulls, asoLen)
+bears = ta.sma(tmpBears, asoLen)
+
+bullSent = bulls > bears          // blue above red  → buyers dominant
+bearSent = bears > bulls          // red above blue  → sellers dominant
+bullCross = ta.crossover(bulls, bears)   // sentiment flips bearish → bullish
+bearCross = ta.crossover(bears, bulls)   // sentiment flips bullish → bearish
+
+// ────────────────────────────────  STOCHASTIC  ─────────────────────────────
+k = ta.sma(ta.stoch(close, high, low, periodK), smoothK)
+d = ta.sma(k, periodD)
+
+// ───────────────────────────────  EMA RIBBON  ──────────────────────────────
+emaFast = ta.ema(close, emaFastLen)
+emaSlow = ta.ema(close, emaSlowLen)
+emaUp   = ta.crossover(emaFast, emaSlow)
+emaDn   = ta.crossunder(emaFast, emaSlow)
+
+// ══════════════════════════  TREND-FOLLOWING SETUPS  ═══════════════════════
+// Bearish sentiment → wait for %K above 80, then %K closes below %D and below 80.
+// Bullish sentiment → wait for %K below 20, then %K closes above %D and above 20.
+var bool armShort = false
+var bool armLong  = false
+
+if bearSent
+    armLong := false
+    if k > obLevel
+        armShort := true
+else if bullSent
+    armShort := false
+    if k < osLevel
+        armLong := true
+
+shortReady = k < d and k < obLevel
+longReady  = k > d and k > osLevel
+
+tfShort = armShort and bearSent and shortReady and not shortReady[1]
+tfLong  = armLong  and bullSent and longReady  and not longReady[1]
+
+if tfShort
+    armShort := false
+if tfLong
+    armLong := false
+
+// ═════════════════════════════  REVERSAL SETUPS  ═══════════════════════════
+// After the ASO crossover, wait for a pullback against the new sentiment
+// (EMA 5 crossing the wrong side of EMA 8) and then for the pullback to end.
+var bool revShortWait = false
+var bool revShortPB   = false
+var bool revLongWait  = false
+var bool revLongPB    = false
+
+if bearCross
+    revShortWait := true
+    revShortPB   := false
+    revLongWait  := false
+    revLongPB    := false
+if bullCross
+    revLongWait  := true
+    revLongPB    := false
+    revShortWait := false
+    revShortPB   := false
+
+if revShortWait and emaFast > emaSlow
+    revShortPB := true
+if revLongWait and emaFast < emaSlow
+    revLongPB := true
+
+rvShort = revShortWait and revShortPB and emaDn and bearSent
+rvLong  = revLongWait  and revLongPB  and emaUp and bullSent
+
+if rvShort
+    revShortWait := false
+    revShortPB   := false
+if rvLong
+    revLongWait := false
+    revLongPB   := false
+
+// ───────────────────────────  COMBINED SIGNALS  ────────────────────────────
+useTF  = sigMode == "Trend Following" or sigMode == "Both"
+useRev = sigMode == "Reversal"        or sigMode == "Both"
+
+rawLong  = (useTF and tfLong)  or (useRev and rvLong)
+rawShort = (useTF and tfShort) or (useRev and rvShort)
+
+// ═══════════════════════════  TRADE MANAGEMENT  ════════════════════════════
+var int   tDir   = 0            // 1 long, -1 short, 0 flat
+var float tEntry = na
+var float tStop  = na
+var float tTgt1  = na
+var float tTgt2  = na
+var float tTgt3  = na
+var bool  hit1   = false
+var bool  hit2   = false
+var bool  hit3   = false
+
+atrV      = ta.atr(atrLen)
+swingHigh = ta.highest(high, slLookback)
+swingLow  = ta.lowest(low,  slLookback)
+
+// resolve a fresh signal against the open setup
+canTake  = tDir == 0 or not oneAtATime or (flipOnOpp and ((rawLong and tDir == -1) or (rawShort and tDir == 1)))
+longSig  = rawLong  and canTake and not rawShort
+shortSig = rawShort and canTake and not rawLong
+
+// ── manage the open setup on this bar ──
+stopHit = false
+if tDir != 0
+    if tDir == 1
+        if low <= tStop
+            stopHit := true
+        else
+            if not hit1 and high >= tTgt1
+                hit1 := true
+            if not hit2 and high >= tTgt2
+                hit2 := true
+            if not hit3 and high >= tTgt3
+                hit3 := true
+    else
+        if high >= tStop
+            stopHit := true
+        else
+            if not hit1 and low <= tTgt1
+                hit1 := true
+            if not hit2 and low <= tTgt2
+                hit2 := true
+            if not hit3 and low <= tTgt3
+                hit3 := true
+
+t1Now = hit1 and not hit1[1]
+t2Now = hit2 and not hit2[1]
+t3Now = hit3 and not hit3[1]
+slNow = stopHit and tDir != 0
+
+if slNow or hit3
+    tDir := 0
+
+// close the open setup before flipping to the other side
+if (longSig and tDir == -1) or (shortSig and tDir == 1)
+    tDir := 0
+
+// ── open a new setup ──
+newLong  = false
+newShort = false
+if longSig
+    entry = close
+    stop  = swingLow - atrBuffer * atrV
+    risk  = entry - stop
+    if risk > 0
+        tDir   := 1
+        tEntry := entry
+        tStop  := stop
+        tTgt1  := entry + risk * rr1
+        tTgt2  := entry + risk * rr2
+        tTgt3  := entry + risk * rr3
+        hit1   := false
+        hit2   := false
+        hit3   := false
+        newLong := true
+if shortSig
+    entry = close
+    stop  = swingHigh + atrBuffer * atrV
+    risk  = stop - entry
+    if risk > 0
+        tDir   := -1
+        tEntry := entry
+        tStop  := stop
+        tTgt1  := entry - risk * rr1
+        tTgt2  := entry - risk * rr2
+        tTgt3  := entry - risk * rr3
+        hit1   := false
+        hit2   := false
+        hit3   := false
+        newShort := true
+
+// ═══════════════════════════════  PLOTTING  ════════════════════════════════
+// Sentiment pane
+pBulls = plot(bulls, "Bullish %", color=color.new(#2962FF, 0), linewidth=2)
+pBears = plot(bears, "Bearish %", color=color.new(#F23645, 0), linewidth=2)
+fill(pBulls, pBears, color=bullSent ? color.new(#2962FF, 88) : color.new(#F23645, 88), title="Sentiment Fill")
+
+plot(showStoch ? k : na, "%K", color=color.new(#26A69A, 25))
+plot(showStoch ? d : na, "%D", color=color.new(#FF6D00, 25))
+
+hOb = hline(obLevel, "Overbought", color=color.new(#787B86, 40), linestyle=hline.style_dotted)
+hline(50, "Midline", color=color.new(#787B86, 20))
+hOs = hline(osLevel, "Oversold", color=color.new(#787B86, 40), linestyle=hline.style_dotted)
+fill(hOb, hOs, color=color.new(#787B86, 95), title="Stoch Band")
+
+plotshape(bullCross, "Sentiment turns bullish", shape.triangleup,   location.bottom, color.new(#2962FF, 20), size=size.tiny)
+plotshape(bearCross, "Sentiment turns bearish", shape.triangledown, location.top,    color.new(#F23645, 20), size=size.tiny)
+
+// Price chart overlays
+plot(showEma ? emaFast : na, "EMA Fast", color=color.new(color.white,  0), linewidth=1, force_overlay=true)
+plot(showEma ? emaSlow : na, "EMA Slow", color=color.new(#FF6D00, 0), linewidth=1, force_overlay=true)
+
+plotshape(newLong,  "BUY",  shape.labelup,   location.belowbar, color.new(#2962FF, 0), text="BUY",
+     textcolor=color.white, size=size.small, force_overlay=true)
+plotshape(newShort, "SELL", shape.labeldown, location.abovebar, color.new(#F23645, 0), text="SELL",
+     textcolor=color.white, size=size.small, force_overlay=true)
+
+levelLine(float price, color col, string txt, int style) =>
+    ln = line.new(bar_index, price, bar_index + projBars, price, xloc=xloc.bar_index,
+         color=col, width=1, style=style, force_overlay=true)
+    label.new(bar_index + projBars, price, txt + "  " + str.tostring(price, format.mintick),
+         xloc=xloc.bar_index, style=label.style_label_left, textcolor=col,
+         color=color.new(color.black, 100), size=size.small, force_overlay=true)
+    ln
+
+if showLevels and (newLong or newShort)
+    levelLine(tStop, color.new(#F23645, 0), "SL",  line.style_solid)
+    levelLine(tEntry, color.new(#787B86, 0), "Entry", line.style_dotted)
+    levelLine(tTgt1, color.new(#26A69A, 30), "TP1 " + str.tostring(rr1, "#.##") + "R", line.style_dashed)
+    levelLine(tTgt2, color.new(#26A69A, 15), "TP2 " + str.tostring(rr2, "#.##") + "R", line.style_dashed)
+    levelLine(tTgt3, color.new(#26A69A, 0),  "TP3 " + str.tostring(rr3, "#.##") + "R", line.style_dashed)
+
+plotshape(showHits and t1Now ? tTgt1 : na, "TP1 hit", shape.xcross, location.absolute, color.new(#26A69A, 0), size=size.tiny, force_overlay=true)
+plotshape(showHits and t2Now ? tTgt2 : na, "TP2 hit", shape.xcross, location.absolute, color.new(#26A69A, 0), size=size.tiny, force_overlay=true)
+plotshape(showHits and t3Now ? tTgt3 : na, "TP3 hit", shape.xcross, location.absolute, color.new(#26A69A, 0), size=size.tiny, force_overlay=true)
+plotshape(showHits and slNow ? tStop : na, "SL hit",  shape.xcross, location.absolute, color.new(#F23645, 0), size=size.tiny, force_overlay=true)
+
+// ─────────────────────────────  INFO PANEL  ────────────────────────────────
+var table panel = table.new(position.top_right, 2, 5, border_width=1, force_overlay=true)
+if showPanel and barstate.islast
+    sentTxt = bullSent ? "BULLISH" : bearSent ? "BEARISH" : "FLAT"
+    sentCol = bullSent ? #2962FF : bearSent ? #F23645 : #787B86
+    table.cell(panel, 0, 0, "THECC Sentiment Pulse", text_color=color.white, bgcolor=color.new(#1E222D, 0), text_size=size.small)
+    table.cell(panel, 1, 0, sigMode, text_color=color.white, bgcolor=color.new(#1E222D, 0), text_size=size.small)
+    table.cell(panel, 0, 1, "Sentiment", text_size=size.small, text_color=color.gray)
+    table.cell(panel, 1, 1, sentTxt, text_color=sentCol, text_size=size.small)
+    table.cell(panel, 0, 2, "Bulls / Bears", text_size=size.small, text_color=color.gray)
+    table.cell(panel, 1, 2, str.tostring(bulls, "#.#") + "% / " + str.tostring(bears, "#.#") + "%", text_size=size.small, text_color=color.white)
+    table.cell(panel, 0, 3, "Open setup", text_size=size.small, text_color=color.gray)
+    table.cell(panel, 1, 3, tDir == 1 ? "LONG" : tDir == -1 ? "SHORT" : "none",
+         text_color=tDir == 1 ? #2962FF : tDir == -1 ? #F23645 : color.gray, text_size=size.small)
+    table.cell(panel, 0, 4, "Targets hit", text_size=size.small, text_color=color.gray)
+    hitsTxt = (hit1 ? "1 " : "") + (hit2 ? "2 " : "") + (hit3 ? "3" : "")
+    table.cell(panel, 1, 4, tDir == 0 ? "-" : hitsTxt == "" ? "none" : hitsTxt, text_size=size.small, text_color=color.white)
+
+// ───────────────────────────────  ALERTS  ──────────────────────────────────
+alertcondition(newLong,  "THECC SP: BUY",  "THECC Sentiment Pulse BUY signal")
+alertcondition(newShort, "THECC SP: SELL", "THECC Sentiment Pulse SELL signal")
+alertcondition(bullCross, "THECC SP: Sentiment turns bullish", "ASO sentiment flipped bullish")
+alertcondition(bearCross, "THECC SP: Sentiment turns bearish", "ASO sentiment flipped bearish")
+alertcondition(t1Now, "THECC SP: TP1 hit", "Target 1 reached")
+alertcondition(t2Now, "THECC SP: TP2 hit", "Target 2 reached")
+alertcondition(t3Now, "THECC SP: TP3 hit", "Target 3 reached")
+alertcondition(slNow, "THECC SP: SL hit",  "Stop loss hit")
+
+if newLong or newShort
+    side = newLong ? "BUY" : "SELL"
+    alert(side + " @ " + str.tostring(tEntry, format.mintick) +
+         " | SL " + str.tostring(tStop, format.mintick) +
+         " | TP1 " + str.tostring(tTgt1, format.mintick) +
+         " | TP2 " + str.tostring(tTgt2, format.mintick) +
+         " | TP3 " + str.tostring(tTgt3, format.mintick), alert.freq_once_per_bar_close)
