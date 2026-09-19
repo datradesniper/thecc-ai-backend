@@ -265,7 +265,7 @@ plotshape(newLong,  "BUY",  shape.labelup,   location.belowbar, color.new(#2962F
 plotshape(newShort, "SELL", shape.labeldown, location.abovebar, color.new(#F23645, 0), text="SELL",
      textcolor=color.white, size=size.small, force_overlay=true)
 
-levelLine(float price, color col, string txt, int style) =>
+levelLine(float price, color col, string txt, string style) =>
     ln = line.new(bar_index, price, bar_index + projBars, price, xloc=xloc.bar_index,
          color=col, width=1, style=style, force_overlay=true)
     label.new(bar_index + projBars, price, txt + "  " + str.tostring(price, format.mintick),
