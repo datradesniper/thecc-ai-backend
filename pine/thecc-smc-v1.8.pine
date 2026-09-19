@@ -1,0 +1,1065 @@
+//@version=6
+// =============================================================================
+// SMC TOOLKIT v1.8 — FVG / weak FVG / BPR / MSS-BOS / Liquidity / EQH-EQL
+//   v1.8: added MSS + BOS alerts (alertcondition() named conditions and
+//         dynamic alert() messages). No changes to any detection logic.
+// =============================================================================
+indicator('SMC Toolkit v1.8 — FVG / BPR / MSS-BOS / Liquidity / EQH-EQL'
+     , shorttitle        = 'SMC v1.8'
+     , overlay           = true
+     , max_boxes_count   = 500
+     , max_labels_count  = 500
+     , max_lines_count   = 500)
+
+// =============================================================================
+// GENERAL   >>> RECONSTRUCTED HEADER — replace with your originals if different
+// =============================================================================
+gGEN      = '═══ General ═══'
+i_mode    = input.string('Present', title='Mode', group=gGEN, options=['Present','Historical'], tooltip='Present = only build zones inside the recent lookback window (lighter, and MSS clears old structure lines). Historical = build across the whole chart.')
+visRange  = input.int   (500,       title='Present mode lookback (bars)', group=gGEN, minval=10, maxval=5000)
+detectSrc = input.string('FVG',     title='Detection source', group=gGEN, options=['FVG','IFVG'])
+
+gFVG         = '═══ Fair Value Gaps (FVG) ═══'
+shwFVG       = input.bool  (true,    title='Show FVGs',                       group=gFVG)
+visFVG       = input.int   (5,       title='# Visible FVGs each side',        group=gFVG, minval=1, maxval=20)
+fvgExt       = input.int   (8,       title='Extend bars to right',            group=gFVG, minval=1, maxval=500)
+fvgPartLn    = input.bool  (true,    title='Dash border on partial mitigation', group=gFVG)
+fvgMitMethod = input.string('Close', title='FVG mitigation (Wick / Close)',   group=gFVG, options=['Wick','Close'], tooltip='Close (default) = the FVG stays alive until a candle BODY closes fully through it. Wick = any high/low piercing the far side mitigates it.')
+
+gFB = '── Bullish FVG box ──'
+// =============================================================================
+// END RECONSTRUCTED HEADER
+// =============================================================================
+cFVGbl       = input.color (color.new(#00e676, 0),  title='Color',          group=gFB, inline='b1')
+cFVGblFill   = input.int   (88,                      title='Fill transp',    group=gFB, inline='b1', minval=0, maxval=100)
+cFVGblBord   = input.int   (55,                      title='Border transp',  group=gFB, inline='b2', minval=0, maxval=100)
+fvgblBordSt  = input.string('Solid',                 title='Border style',   group=gFB, inline='b2', options=['Solid','Dashed','Dotted'])
+cFVGblBR     = input.color (color.new(#808000, 0),  title='Mitigated fill', group=gFB, inline='b3')
+cFVGblBRTr   = input.int   (90,                      title='Mitigated transp', group=gFB, inline='b3', minval=0, maxval=100)
+
+gFBL = '── Bullish FVG label ──'
+showFvgBlLab  = input.bool  (true,                    title='Show label',  group=gFBL)
+fvgBlLabText  = input.string('+FVG',                  title='Label text',  group=gFBL)
+fvgBlLabSize  = input.string('normal',                title='Size',        group=gFBL, options=['tiny','small','normal','large','huge'])
+fvgBlLabPos   = input.string('Center',                title='Horizontal position', group=gFBL, options=['Left','Center','Right'])
+fvgBlLabStyle = input.string('Label Right',           title='Label style', group=gFBL, options=['Label Right','Label Left','Label Up','Label Down','Label Center','None'])
+fvgBlLabTxt   = input.color (color.new(#000000, 0),  title='Text color',  group=gFBL, inline='bl1')
+fvgBlLabBg    = input.color (color.new(#000000, 100), title='Background color', group=gFBL, inline='bl1')
+fvgBlLabXOff  = input.int   (0,                       title='X offset (bars)', group=gFBL, minval=-500, maxval=500)
+
+gFBr = '── Bearish FVG box ──'
+cFVGbr       = input.color (color.new(#ff5252, 0),  title='Color',          group=gFBr, inline='r1')
+cFVGbrFill   = input.int   (88,                      title='Fill transp',    group=gFBr, inline='r1', minval=0, maxval=100)
+cFVGbrBord   = input.int   (55,                      title='Border transp',  group=gFBr, inline='r2', minval=0, maxval=100)
+fvgbrBordSt  = input.string('Solid',                 title='Border style',   group=gFBr, inline='r2', options=['Solid','Dashed','Dotted'])
+cFVGbrBR     = input.color (color.new(#ff0000, 0),  title='Mitigated fill', group=gFBr, inline='r3')
+cFVGbrBRTr   = input.int   (90,                      title='Mitigated transp', group=gFBr, inline='r3', minval=0, maxval=100)
+
+gFBrL = '── Bearish FVG label ──'
+showFvgBrLab  = input.bool  (true,                    title='Show label',  group=gFBrL)
+fvgBrLabText  = input.string('-FVG',                  title='Label text',  group=gFBrL)
+fvgBrLabSize  = input.string('normal',                title='Size',        group=gFBrL, options=['tiny','small','normal','large','huge'])
+fvgBrLabPos   = input.string('Center',                title='Horizontal position', group=gFBrL, options=['Left','Center','Right'])
+fvgBrLabStyle = input.string('Label Right',           title='Label style', group=gFBrL, options=['Label Right','Label Left','Label Up','Label Down','Label Center','None'])
+fvgBrLabTxt   = input.color (color.new(#ff5252, 0),  title='Text color',  group=gFBrL, inline='br1')
+fvgBrLabBg    = input.color (color.new(#000000, 100), title='Background color', group=gFBrL, inline='br1')
+fvgBrLabXOff  = input.int   (0,                       title='X offset (bars)', group=gFBrL, minval=-500, maxval=500)
+
+// =============================================================================
+// SHOW ALL / WEAK FVGs — NEW IN v1.7
+// =============================================================================
+gWFVG = '═══ Show ALL FVGs (Weak / Unfiltered) ═══'
+showAllFVG = input.bool(false, title='Show ALL FVGs (include weak displacement)', group=gWFVG, tooltip='OFF (default) = only "strong" FVGs are drawn — the 3-candle gap PLUS a valid displacement middle candle: its body must be larger than the recent 5-bar average body AND both wicks must be under 36% of the body. This is the original v1.6 behavior and filters out low-quality gaps.\n\nON = every geometric 3-candle FVG is also drawn. The gaps that FAILED the displacement test ("weak" FVGs — e.g. a big move that left a long rejection/sweep wick, or a small-body drift gap) appear in the separate, dimmer/dashed style configured below, with their own label, so you can still tell strong vs weak at a glance.\n\nWhy weak gaps are hidden by default: a fat wick against the move means price was rejected/absorbed mid-bar, so that imbalance is more likely to be traded back through. BUT a long wick can also be a liquidity SWEEP that fuels the next leg (a high-value setup the strong filter wrongly hides). Turn this ON when you want to see those sweep gaps too.')
+visWeakFVG = input.int(5, title='# Visible weak FVGs each side', group=gWFVG, minval=1, maxval=20, tooltip='How many weak FVGs to keep on screen per direction before the oldest is removed. Independent of the strong-FVG count so weak gaps never push your strong ones off the chart.')
+
+gWFB = '── Weak Bullish FVG box ──'
+cWFVGbl      = input.color (color.new(#787b86, 0),   title='Color',           group=gWFB, inline='wb1')
+cWFVGblFill  = input.int   (93,                       title='Fill transp',     group=gWFB, inline='wb1', minval=0, maxval=100)
+cWFVGblBord  = input.int   (65,                       title='Border transp',   group=gWFB, inline='wb2', minval=0, maxval=100)
+wfvgblBordSt = input.string('Dashed',                 title='Border style',    group=gWFB, inline='wb2', options=['Solid','Dashed','Dotted'])
+cWFVGblBR    = input.color (color.new(#787b86, 0),   title='Mitigated fill',  group=gWFB, inline='wb3')
+cWFVGblBRTr  = input.int   (95,                       title='Mitigated transp', group=gWFB, inline='wb3', minval=0, maxval=100)
+
+gWFBr = '── Weak Bearish FVG box ──'
+cWFVGbr      = input.color (color.new(#787b86, 0),   title='Color',           group=gWFBr, inline='wr1')
+cWFVGbrFill  = input.int   (93,                       title='Fill transp',     group=gWFBr, inline='wr1', minval=0, maxval=100)
+cWFVGbrBord  = input.int   (65,                       title='Border transp',   group=gWFBr, inline='wr2', minval=0, maxval=100)
+wfvgbrBordSt = input.string('Dashed',                 title='Border style',    group=gWFBr, inline='wr2', options=['Solid','Dashed','Dotted'])
+cWFVGbrBR    = input.color (color.new(#787b86, 0),   title='Mitigated fill',  group=gWFBr, inline='wr3')
+cWFVGbrBRTr  = input.int   (95,                       title='Mitigated transp', group=gWFBr, inline='wr3', minval=0, maxval=100)
+
+gWFL = '── Weak FVG labels ──'
+showWFvgLab   = input.bool  (true,                    title='Show weak FVG label', group=gWFL)
+wfvgBlLabText = input.string('+wFVG',                 title='Bullish label text',  group=gWFL)
+wfvgBrLabText = input.string('-wFVG',                 title='Bearish label text',  group=gWFL)
+wfvgLabSize   = input.string('small',                 title='Label size',          group=gWFL, options=['tiny','small','normal','large','huge'])
+wfvgLabPos    = input.string('Center',                title='Horizontal position', group=gWFL, options=['Left','Center','Right'])
+wfvgBlLabStyle= input.string('Label Right',           title='Bullish label style', group=gWFL, options=['Label Right','Label Left','Label Up','Label Down','Label Center','None'])
+wfvgBrLabStyle= input.string('Label Right',           title='Bearish label style', group=gWFL, options=['Label Right','Label Left','Label Up','Label Down','Label Center','None'])
+wfvgBlLabTxt  = input.color (color.new(#787b86, 0),  title='Bullish text color',  group=gWFL, inline='wl1')
+wfvgBrLabTxt  = input.color (color.new(#787b86, 0),  title='Bearish text color',  group=gWFL, inline='wl1')
+wfvgLabBg     = input.color (color.new(#000000, 100), title='Label background',    group=gWFL)
+wfvgLabXOff   = input.int   (0,                       title='X offset (bars)',     group=gWFL, minval=-500, maxval=500)
+
+// =============================================================================
+// BALANCE PRICE RANGE (BPR)
+// =============================================================================
+gBPR = '═══ Balance Price Range (BPR) ═══'
+shwBPR    = input.bool(true,  title='Show BPRs',                group=gBPR)
+visBPR    = input.int (5,     title='# Visible BPRs each side', group=gBPR, minval=1, maxval=20)
+bprExt    = input.int (8,     title='Extend bars to right',     group=gBPR, minval=1, maxval=500)
+bprPartLn = input.bool(true,  title='Dash border on partial mitigation', group=gBPR)
+bprBarsSince = input.int (10, title='BPR lookback (bars between FVGs)', group=gBPR, minval=1, maxval=100, tooltip='A BPR forms when an opposing FVG appears within this many bars of a new FVG. Higher = catches more BPRs (matches BPR [TFO] behavior).')
+bprThreshold = input.float(0, title='BPR min range (price)', group=gBPR, step=0.25, minval=0, tooltip='Minimum size of the overlap for a valid BPR. 0 = accept any overlap.')
+bprCleanOnly = input.bool(false, title='Only clean BPRs', group=gBPR, tooltip='Only show BPRs where price did not interfere with the overlap before completion.')
+bprMitMethod = input.string('Close', title='BPR mitigation (Wick / Close)', group=gBPR, options=['Wick','Close'], tooltip='Close (default) = the BPR stays alive until a candle BODY closes fully through the zone — a wick poking through does NOT mitigate it. Wick = any high/low piercing the zone mitigates it.')
+
+gBB = '── Bullish BPR box ──'
+cBPRbl       = input.color (color.new(#2962ff, 0),  title='Color',          group=gBB, inline='B1')
+cBPRblFill   = input.int   (82,                      title='Fill transp',    group=gBB, inline='B1', minval=0, maxval=100)
+cBPRblBord   = input.int   (45,                      title='Border transp',  group=gBB, inline='B2', minval=0, maxval=100)
+bprblBordSt  = input.string('Solid',                 title='Border style',   group=gBB, inline='B2', options=['Solid','Dashed','Dotted'])
+cBPRblBR     = input.color (color.new(#1565c0, 0),  title='Mitigated fill', group=gBB, inline='B3')
+cBPRblBRTr   = input.int   (90,                      title='Mitigated transp', group=gBB, inline='B3', minval=0, maxval=100)
+
+gBBL = '── Bullish BPR label ──'
+showBprBlLab  = input.bool  (true,                    title='Show label',  group=gBBL)
+bprBlLabText  = input.string('+BPR',                  title='Label text',  group=gBBL)
+bprBlLabSize  = input.string('normal',                title='Size',        group=gBBL, options=['tiny','small','normal','large','huge'])
+bprBlLabPos   = input.string('Center',                title='Horizontal position', group=gBBL, options=['Left','Center','Right'])
+bprBlLabStyle = input.string('Label Right',           title='Label style', group=gBBL, options=['Label Right','Label Left','Label Up','Label Down','Label Center','None'])
+bprBlLabTxt   = input.color (color.new(#2962ff, 0),  title='Text color',  group=gBBL, inline='Bl1')
+bprBlLabBg    = input.color (color.new(#000000, 100), title='Background color', group=gBBL, inline='Bl1')
+bprBlLabXOff  = input.int   (0,                       title='X offset (bars)', group=gBBL, minval=-500, maxval=500)
+
+gBBr = '── Bearish BPR box ──'
+cBPRbr       = input.color (color.new(#ff6d00, 0),  title='Color',          group=gBBr, inline='R1')
+cBPRbrFill   = input.int   (82,                      title='Fill transp',    group=gBBr, inline='R1', minval=0, maxval=100)
+cBPRbrBord   = input.int   (45,                      title='Border transp',  group=gBBr, inline='R2', minval=0, maxval=100)
+bprbrBordSt  = input.string('Solid',                 title='Border style',   group=gBBr, inline='R2', options=['Solid','Dashed','Dotted'])
+cBPRbrBR     = input.color (color.new(#e65100, 0),  title='Mitigated fill', group=gBBr, inline='R3')
+cBPRbrBRTr   = input.int   (90,                      title='Mitigated transp', group=gBBr, inline='R3', minval=0, maxval=100)
+
+gBBrL = '── Bearish BPR label ──'
+showBprBrLab  = input.bool  (true,                    title='Show label',  group=gBBrL)
+bprBrLabText  = input.string('-BPR',                  title='Label text',  group=gBBrL)
+bprBrLabSize  = input.string('normal',                title='Size',        group=gBBrL, options=['tiny','small','normal','large','huge'])
+bprBrLabPos   = input.string('Center',                title='Horizontal position', group=gBBrL, options=['Left','Center','Right'])
+bprBrLabStyle = input.string('Label Right',           title='Label style', group=gBBrL, options=['Label Right','Label Left','Label Up','Label Down','Label Center','None'])
+bprBrLabTxt   = input.color (color.new(#ff6d00, 0),  title='Text color',  group=gBBrL, inline='Br1')
+bprBrLabBg    = input.color (color.new(#000000, 100), title='Background color', group=gBBrL, inline='Br1')
+bprBrLabXOff  = input.int   (0,                       title='X offset (bars)', group=gBBrL, minval=-500, maxval=500)
+
+// =============================================================================
+// MIDPOINT (50%) LINES
+// =============================================================================
+gMID = '═══ Midpoint (50%) Lines ═══'
+showFvgMid  = input.bool  (false,                  title='Show FVG midpoint line', group=gMID)
+fvgMidColor = input.color (color.new(#9e9e9e, 0),  title='FVG mid color',  group=gMID, inline='fm')
+fvgMidStyle = input.string('Dotted',               title='Style',          group=gMID, inline='fm', options=['Solid','Dashed','Dotted'])
+fvgMidWidth = input.int   (1,                       title='Width',          group=gMID, inline='fm', minval=1, maxval=5)
+showBprMid  = input.bool  (true,                   title='Show BPR midpoint line', group=gMID)
+bprMidColor = input.color (color.new(#000000, 0),  title='BPR mid color',  group=gMID, inline='bm')
+bprMidStyle = input.string('Dotted',               title='Style',          group=gMID, inline='bm', options=['Solid','Dashed','Dotted'])
+bprMidWidth = input.int   (1,                       title='Width',          group=gMID, inline='bm', minval=1, maxval=5)
+
+// =============================================================================
+// MARKET STRUCTURE (MSS / BOS)
+// =============================================================================
+gMS = '═══ Market Structure (MSS / BOS) ═══'
+shwMS  = input.bool(true,  title='Show Market Structure',           group=gMS)
+msLen  = input.int (5,     title='Pivot length (swing detection)',  group=gMS, minval=3, maxval=20)
+iMSS   = input.bool(true,  title='Show MSS (Market Structure Shift)', group=gMS)
+iBOS   = input.bool(true,  title='Show BOS (Break of Structure)',     group=gMS)
+maxMSLines = input.int(50, title='Max BOS lines to keep',           group=gMS, minval=10, maxval=300)
+
+gMSSbl = '── MSS Bullish ──'
+cMSSbl         = input.color (color.new(#00e6a1, 0),   title='Line color',     group=gMSSbl, inline='mssbl1')
+mssBlLineWidth = input.int   (2,                        title='Width',         group=gMSSbl, inline='mssbl1', minval=1, maxval=5)
+mssBlLineStyle = input.string('Solid',                  title='Style',         group=gMSSbl, options=['Solid','Dashed','Dotted'])
+showMssBlLab   = input.bool  (true,                     title='Show label',    group=gMSSbl)
+mssBlLabText   = input.string('MSS',                    title='Label text',    group=gMSSbl)
+mssBlLabSize   = input.string('normal',                 title='Label size',    group=gMSSbl, options=['tiny','small','normal','large','huge'])
+mssBlLabStyle  = input.string('Label Down',             title='Label style',   group=gMSSbl, options=['Label Right','Label Left','Label Up','Label Down','Label Center','None'])
+mssBlLabTxt    = input.color (color.new(#00e6a1, 0),   title='Text color',    group=gMSSbl, inline='mssbl2')
+mssBlLabBg     = input.color (color.new(#000000, 100),  title='Background',    group=gMSSbl, inline='mssbl2')
+
+gMSSbr = '── MSS Bearish ──'
+cMSSbr         = input.color (color.new(#e60400, 0),   title='Line color',     group=gMSSbr, inline='mssbr1')
+mssBrLineWidth = input.int   (2,                        title='Width',         group=gMSSbr, inline='mssbr1', minval=1, maxval=5)
+mssBrLineStyle = input.string('Solid',                  title='Style',         group=gMSSbr, options=['Solid','Dashed','Dotted'])
+showMssBrLab   = input.bool  (true,                     title='Show label',    group=gMSSbr)
+mssBrLabText   = input.string('MSS',                    title='Label text',    group=gMSSbr)
+mssBrLabSize   = input.string('normal',                 title='Label size',    group=gMSSbr, options=['tiny','small','normal','large','huge'])
+mssBrLabStyle  = input.string('Label Up',               title='Label style',   group=gMSSbr, options=['Label Right','Label Left','Label Up','Label Down','Label Center','None'])
+mssBrLabTxt    = input.color (color.new(#e60400, 0),   title='Text color',    group=gMSSbr, inline='mssbr2')
+mssBrLabBg     = input.color (color.new(#000000, 100),  title='Background',    group=gMSSbr, inline='mssbr2')
+
+gBOSbl = '── BOS Bullish ──'
+cBOSbl         = input.color (color.new(#00e6a1, 0),   title='Line color',     group=gBOSbl, inline='bosbl1')
+bosBlLineWidth = input.int   (2,                        title='Width',         group=gBOSbl, inline='bosbl1', minval=1, maxval=5)
+bosBlLineStyle = input.string('Dotted',                 title='Style',         group=gBOSbl, options=['Solid','Dashed','Dotted'])
+showBosBlLab   = input.bool  (true,                     title='Show label',    group=gBOSbl)
+bosBlLabText   = input.string('BOS',                    title='Label text',    group=gBOSbl)
+bosBlLabSize   = input.string('normal',                 title='Label size',    group=gBOSbl, options=['tiny','small','normal','large','huge'])
+bosBlLabStyle  = input.string('Label Down',             title='Label style',   group=gBOSbl, options=['Label Right','Label Left','Label Up','Label Down','Label Center','None'])
+bosBlLabTxt    = input.color (color.lime,               title='Text color',    group=gBOSbl, inline='bosbl2')
+bosBlLabBg     = input.color (color.new(#000000, 100),  title='Background',    group=gBOSbl, inline='bosbl2')
+
+gBOSbr = '── BOS Bearish ──'
+cBOSbr         = input.color (color.new(#e60400, 0),   title='Line color',     group=gBOSbr, inline='bosbr1')
+bosBrLineWidth = input.int   (2,                        title='Width',         group=gBOSbr, inline='bosbr1', minval=1, maxval=5)
+bosBrLineStyle = input.string('Dotted',                 title='Style',         group=gBOSbr, options=['Solid','Dashed','Dotted'])
+showBosBrLab   = input.bool  (true,                     title='Show label',    group=gBOSbr)
+bosBrLabText   = input.string('BOS',                    title='Label text',    group=gBOSbr)
+bosBrLabSize   = input.string('normal',                 title='Label size',    group=gBOSbr, options=['tiny','small','normal','large','huge'])
+bosBrLabStyle  = input.string('Label Up',               title='Label style',   group=gBOSbr, options=['Label Right','Label Left','Label Up','Label Down','Label Center','None'])
+bosBrLabTxt    = input.color (color.red,                title='Text color',    group=gBOSbr, inline='bosbr2')
+bosBrLabBg     = input.color (color.new(#000000, 100),  title='Background',    group=gBOSbr, inline='bosbr2')
+
+// =============================================================================
+// ALERTS (MSS / BOS) — NEW IN v1.8
+// =============================================================================
+gALRT = '═══ Alerts (MSS / BOS) ═══'
+alertOnClose = input.bool  (true, title='Fire on bar close only (recommended)', group=gALRT, tooltip='ON = the alert only fires once the bar has CLOSED, so a break that gets un-done intrabar never alerts you (no repaint, no premature alert). OFF = fires the instant price trades through the level — faster, but the break can fail before the close.')
+alertMssBull = input.bool  (true, title='Alert: Bullish MSS', group=gALRT)
+alertMssBear = input.bool  (true, title='Alert: Bearish MSS', group=gALRT)
+alertBosBull = input.bool  (true, title='Alert: Bullish BOS', group=gALRT)
+alertBosBear = input.bool  (true, title='Alert: Bearish BOS', group=gALRT)
+alertPrefix  = input.string('',   title='Message prefix (optional)', group=gALRT, tooltip='Prepended to every alert() message — handy for routing to a webhook or bot.')
+
+// =============================================================================
+// LIQUIDITY SWEEPS
+// =============================================================================
+gLIQ = '═══ Liquidity Sweeps ═══'
+shwLiq      = input.bool(true, title='Show Liquidity Sweeps',  group=gLIQ)
+liqLookback = input.int (20,   title='Liquidity Lookback',     group=gLIQ, minval=5, maxval=200, tooltip='How many bars back to find the "recent" high/low that gets swept')
+
+gLIQbs = '── Buy-side Sweep (above) label ──'
+showBuyLab    = input.bool  (true,                   title='Show label',  group=gLIQbs)
+buyLabText    = input.string('$ sweep',              title='Label text',  group=gLIQbs)
+buyLabSize    = input.string('normal',               title='Size',        group=gLIQbs, options=['tiny','small','normal','large','huge'])
+buyLabStyle   = input.string('Label Down',           title='Label style', group=gLIQbs, options=['Label Right','Label Left','Label Up','Label Down','Label Center','None'])
+buyLabTxt     = input.color (color.new(#ff1744, 0), title='Text color',  group=gLIQbs, inline='bs1')
+buyLabBg      = input.color (color.new(#000000, 100),title='Background',  group=gLIQbs, inline='bs1')
+
+gLIQss = '── Sell-side Sweep (below) label ──'
+showSellLab   = input.bool  (true,                   title='Show label',  group=gLIQss)
+sellLabText   = input.string('$ sweep',              title='Label text',  group=gLIQss)
+sellLabSize   = input.string('normal',               title='Size',        group=gLIQss, options=['tiny','small','normal','large','huge'])
+sellLabStyle  = input.string('Label Up',             title='Label style', group=gLIQss, options=['Label Right','Label Left','Label Up','Label Down','Label Center','None'])
+sellLabTxt    = input.color (color.new(#c8e624, 0), title='Text color',  group=gLIQss, inline='ss1')
+sellLabBg     = input.color (color.new(#000000, 100),title='Background',  group=gLIQss, inline='ss1')
+
+// =============================================================================
+// EQUAL HIGHS / LOWS
+// =============================================================================
+gEQ = '═══ Equal Highs / Lows ═══'
+shwEQ       = input.bool (true,  title='Show Equal Highs / Lows', group=gEQ)
+eqLen       = input.int  (5,     title='Swing length (pivot detection)', group=gEQ, minval=2, maxval=20)
+eqTolerance = input.float(0.02,  title='Equal level tolerance %', group=gEQ, minval=0.001, maxval=0.5, step=0.005, tooltip='Two pivots within this % of each other are considered equal')
+eqExtBars   = input.int  (10,    title='Extend line bars to right', group=gEQ, minval=0, maxval=500)
+maxEqLines  = input.int  (20,    title='Max EQH/EQL drawings to keep', group=gEQ, minval=2, maxval=100)
+
+gEQH = '── Equal Highs ──'
+eqhLineColor = input.color (color.new(#ff1744, 30),  title='Line color',  group=gEQH, inline='eqh1')
+eqhLineWidth = input.int   (1,                        title='Width',       group=gEQH, inline='eqh1', minval=1, maxval=5)
+eqhLineStyle = input.string('Dashed',                 title='Style',       group=gEQH, options=['Solid','Dashed','Dotted'])
+showEqhLab   = input.bool  (true,                     title='Show label',  group=gEQH)
+eqhLabText   = input.string('EQH',                    title='Label text',  group=gEQH)
+eqhLabSize   = input.string('normal',                 title='Label size',  group=gEQH, options=['tiny','small','normal','large','huge'])
+eqhLabStyle  = input.string('Label Down',             title='Label style', group=gEQH, options=['Label Right','Label Left','Label Up','Label Down','Label Center','None'])
+eqhLabTxt    = input.color (color.new(#ff1744, 0),   title='Text color',  group=gEQH, inline='eqh2')
+eqhLabBg     = input.color (color.new(#000000, 100),  title='Background',  group=gEQH, inline='eqh2')
+
+gEQL = '── Equal Lows ──'
+eqlLineColor = input.color (color.new(#c8e624, 30),  title='Line color',  group=gEQL, inline='eql1')
+eqlLineWidth = input.int   (1,                        title='Width',       group=gEQL, inline='eql1', minval=1, maxval=5)
+eqlLineStyle = input.string('Dashed',                 title='Style',       group=gEQL, options=['Solid','Dashed','Dotted'])
+showEqlLab   = input.bool  (true,                     title='Show label',  group=gEQL)
+eqlLabText   = input.string('EQL',                    title='Label text',  group=gEQL)
+eqlLabSize   = input.string('normal',                 title='Label size',  group=gEQL, options=['tiny','small','normal','large','huge'])
+eqlLabStyle  = input.string('Label Up',               title='Label style', group=gEQL, options=['Label Right','Label Left','Label Up','Label Down','Label Center','None'])
+eqlLabTxt    = input.color (color.new(#c8e624, 0),   title='Text color',  group=gEQL, inline='eql2')
+eqlLabBg     = input.color (color.new(#000000, 100),  title='Background',  group=gEQL, inline='eql2')
+
+// =============================================================================
+// HELPERS
+// =============================================================================
+sizeOf(s) =>
+    switch s
+        'tiny'   => size.tiny
+        'small'  => size.small
+        'normal' => size.normal
+        'large'  => size.large
+        'huge'   => size.huge
+        =>          size.small
+
+lineStyleOf(s) =>
+    switch s
+        'Solid'  => line.style_solid
+        'Dashed' => line.style_dashed
+        'Dotted' => line.style_dotted
+        =>          line.style_solid
+
+labStyleOf(s, isUp) =>
+    switch s
+        'Label Right'  => label.style_label_right
+        'Label Left'   => label.style_label_left
+        'Label Up'     => label.style_label_up
+        'Label Down'   => label.style_label_down
+        'Label Center' => label.style_label_center
+        'None'         => label.style_none
+        =>                isUp ? label.style_label_up : label.style_label_down
+
+labelX(left, right, pos, xoff) =>
+    base = pos == 'Left' ? left : pos == 'Center' ? math.round(math.avg(left, right)) : right
+    base + xoff
+
+// =============================================================================
+// GENERAL CALCS
+// =============================================================================
+n          = bar_index
+per        = i_mode == 'Present' ? last_bar_index - bar_index <= visRange : true
+perc_Body  = 0.36
+bxBack     = 50
+swLen      = 5
+mxBody     = math.max(close, open)
+mnBody     = math.min(close, open)
+bodyAbs    = math.abs(close - open)
+meanBody   = ta.sma(bodyAbs, swLen)
+
+L_body   = high - mxBody < bodyAbs * perc_Body and mnBody - low < bodyAbs * perc_Body
+L_bodyUP = bodyAbs > meanBody and L_body and close > open
+L_bodyDN = bodyAbs > meanBody and L_body and close < open
+
+// geometric 3-bar gap (independent of displacement quality)
+gapUP = detectSrc == 'FVG' ? low  > high[2] : low  < high[2]
+gapDN = detectSrc == 'FVG' ? high < low [2] : high > low [2]
+
+// STRONG = gap + valid displacement middle candle (original v1.6 behavior)
+imbalanceUP = L_bodyUP[1] and gapUP
+imbalanceDN = L_bodyDN[1] and gapDN
+
+// WEAK = geometric gap exists but the displacement filter FAILED (only built when Show ALL is on)
+weakUP = showAllFVG and gapUP and not L_bodyUP[1]
+weakDN = showAllFVG and gapDN and not L_bodyDN[1]
+
+// =============================================================================
+// TYPES
+// =============================================================================
+type FVGZone
+    box   bx
+    label lb
+    line  mid
+    bool  active
+    int   pos
+    int   left
+    float top
+    float bot
+
+type ZZ
+    array<int>   d
+    array<int>   x
+    array<float> y
+
+type MSS
+    int          dir
+    array<line>  l_mssBl
+    array<line>  l_mssBr
+    array<line>  l_bosBl
+    array<line>  l_bosBr
+    array<label> lbMssBl
+    array<label> lbMssBr
+    array<label> lbBosBl
+    array<label> lbBosBr
+
+var FVGZone[] aFVG_UP = array.new<FVGZone>()
+var FVGZone[] aFVG_DN = array.new<FVGZone>()
+var FVGZone[] aWFVG_UP = array.new<FVGZone>()
+var FVGZone[] aWFVG_DN = array.new<FVGZone>()
+var FVGZone[] aBPR_UP = array.new<FVGZone>()
+var FVGZone[] aBPR_DN = array.new<FVGZone>()
+
+var ZZ  aZZ = ZZ.new(array.new<int>(50, 0), array.new<int>(50, 0), array.new<float>(50, na))
+var MSS mss = MSS.new(0,
+     array.new<line>(),  array.new<line>(),  array.new<line>(),  array.new<line>(),
+     array.new<label>(), array.new<label>(), array.new<label>(), array.new<label>())
+
+var array<line>  eqLines  = array.new<line>()
+var array<label> eqLabels = array.new<label>()
+
+var float eqLastSwingHigh     = na
+var int   eqLastSwingHighBar  = na
+var float eqPriorSwingHigh    = na
+var int   eqPriorSwingHighBar = na
+var float eqLastSwingLow      = na
+var int   eqLastSwingLowBar   = na
+var float eqPriorSwingLow     = na
+var int   eqPriorSwingLowBar  = na
+
+// =============================================================================
+// FVG: CREATION  (STRONG)
+// =============================================================================
+if shwFVG and imbalanceUP and per
+    extendLatest = imbalanceUP[1] and aFVG_UP.size() > 0 and aFVG_UP.get(0).active
+    if extendLatest
+        z = aFVG_UP.get(0)
+        z.top := high[2]
+        z.bot := low
+        z.bx.set_lefttop    (n - 2, low)
+        z.bx.set_rightbottom(n + fvgExt, high[2])
+        if not na(z.lb)
+            z.lb.set_xy(labelX(n - 2, n + fvgExt, fvgBlLabPos, fvgBlLabXOff), math.avg(low, high[2]))
+        if not na(z.mid)
+            mY = math.avg(low, high[2])
+            z.mid.set_xy1(n - 2, mY)
+            z.mid.set_xy2(n + fvgExt, mY)
+    else
+        topV = detectSrc == 'FVG' ? low      : high[2]
+        botV = detectSrc == 'FVG' ? high[2]  : low
+        bx   = box.new(n - 2, topV, n + fvgExt, botV
+                  , bgcolor      = color.new(cFVGbl,   cFVGblFill)
+                  , border_color = color.new(cFVGbl,   cFVGblBord)
+                  , border_style = lineStyleOf(fvgblBordSt)
+                  , text         = '')
+        lb = showFvgBlLab
+             ? label.new(labelX(n - 2, n + fvgExt, fvgBlLabPos, fvgBlLabXOff), math.avg(topV, botV)
+                  , text      = fvgBlLabText
+                  , textcolor = fvgBlLabTxt
+                  , color     = fvgBlLabBg
+                  , style     = labStyleOf(fvgBlLabStyle, true)
+                  , size      = sizeOf(fvgBlLabSize))
+             : label(na)
+        mid = showFvgMid ? line.new(n - 2, math.avg(topV, botV), n + fvgExt, math.avg(topV, botV), color=fvgMidColor, style=lineStyleOf(fvgMidStyle), width=fvgMidWidth) : line(na)
+        aFVG_UP.unshift(FVGZone.new(bx, lb, mid, true, 0, n - 2, topV, botV))
+        if aFVG_UP.size() > visFVG
+            old = aFVG_UP.pop()
+            old.bx.delete()
+            if not na(old.lb)
+                old.lb.delete()
+            if not na(old.mid)
+                old.mid.delete()
+
+if shwFVG and imbalanceDN and per
+    extendLatest = imbalanceDN[1] and aFVG_DN.size() > 0 and aFVG_DN.get(0).active
+    if extendLatest
+        z = aFVG_DN.get(0)
+        z.top := high
+        z.bot := low[2]
+        z.bx.set_lefttop    (n - 2, low[2])
+        z.bx.set_rightbottom(n + fvgExt, high)
+        if not na(z.lb)
+            z.lb.set_xy(labelX(n - 2, n + fvgExt, fvgBrLabPos, fvgBrLabXOff), math.avg(low[2], high))
+        if not na(z.mid)
+            mY = math.avg(low[2], high)
+            z.mid.set_xy1(n - 2, mY)
+            z.mid.set_xy2(n + fvgExt, mY)
+    else
+        topV = detectSrc == 'FVG' ? low[2] : high
+        botV = detectSrc == 'FVG' ? high   : low[2]
+        bx   = box.new(n - 2, topV, n + fvgExt, botV
+                  , bgcolor      = color.new(cFVGbr,   cFVGbrFill)
+                  , border_color = color.new(cFVGbr,   cFVGbrBord)
+                  , border_style = lineStyleOf(fvgbrBordSt)
+                  , text         = '')
+        lb = showFvgBrLab
+             ? label.new(labelX(n - 2, n + fvgExt, fvgBrLabPos, fvgBrLabXOff), math.avg(topV, botV)
+                  , text      = fvgBrLabText
+                  , textcolor = fvgBrLabTxt
+                  , color     = fvgBrLabBg
+                  , style     = labStyleOf(fvgBrLabStyle, false)
+                  , size      = sizeOf(fvgBrLabSize))
+             : label(na)
+        mid = showFvgMid ? line.new(n - 2, math.avg(topV, botV), n + fvgExt, math.avg(topV, botV), color=fvgMidColor, style=lineStyleOf(fvgMidStyle), width=fvgMidWidth) : line(na)
+        aFVG_DN.unshift(FVGZone.new(bx, lb, mid, true, 0, n - 2, topV, botV))
+        if aFVG_DN.size() > visFVG
+            old = aFVG_DN.pop()
+            old.bx.delete()
+            if not na(old.lb)
+                old.lb.delete()
+            if not na(old.mid)
+                old.mid.delete()
+
+// =============================================================================
+// FVG: CREATION  (WEAK — only when Show ALL FVGs is ON)  — NEW IN v1.7
+// =============================================================================
+if shwFVG and showAllFVG and weakUP and per
+    extendLatest = weakUP[1] and aWFVG_UP.size() > 0 and aWFVG_UP.get(0).active
+    if extendLatest
+        z = aWFVG_UP.get(0)
+        z.top := high[2]
+        z.bot := low
+        z.bx.set_lefttop    (n - 2, low)
+        z.bx.set_rightbottom(n + fvgExt, high[2])
+        if not na(z.lb)
+            z.lb.set_xy(labelX(n - 2, n + fvgExt, wfvgLabPos, wfvgLabXOff), math.avg(low, high[2]))
+    else
+        topV = detectSrc == 'FVG' ? low      : high[2]
+        botV = detectSrc == 'FVG' ? high[2]  : low
+        bx   = box.new(n - 2, topV, n + fvgExt, botV
+                  , bgcolor      = color.new(cWFVGbl, cWFVGblFill)
+                  , border_color = color.new(cWFVGbl, cWFVGblBord)
+                  , border_style = lineStyleOf(wfvgblBordSt)
+                  , text         = '')
+        lb = showWFvgLab
+             ? label.new(labelX(n - 2, n + fvgExt, wfvgLabPos, wfvgLabXOff), math.avg(topV, botV)
+                  , text      = wfvgBlLabText
+                  , textcolor = wfvgBlLabTxt
+                  , color     = wfvgLabBg
+                  , style     = labStyleOf(wfvgBlLabStyle, true)
+                  , size      = sizeOf(wfvgLabSize))
+             : label(na)
+        aWFVG_UP.unshift(FVGZone.new(bx, lb, line(na), true, 0, n - 2, topV, botV))
+        if aWFVG_UP.size() > visWeakFVG
+            old = aWFVG_UP.pop()
+            old.bx.delete()
+            if not na(old.lb)
+                old.lb.delete()
+
+if shwFVG and showAllFVG and weakDN and per
+    extendLatest = weakDN[1] and aWFVG_DN.size() > 0 and aWFVG_DN.get(0).active
+    if extendLatest
+        z = aWFVG_DN.get(0)
+        z.top := high
+        z.bot := low[2]
+        z.bx.set_lefttop    (n - 2, low[2])
+        z.bx.set_rightbottom(n + fvgExt, high)
+        if not na(z.lb)
+            z.lb.set_xy(labelX(n - 2, n + fvgExt, wfvgLabPos, wfvgLabXOff), math.avg(low[2], high))
+    else
+        topV = detectSrc == 'FVG' ? low[2] : high
+        botV = detectSrc == 'FVG' ? high   : low[2]
+        bx   = box.new(n - 2, topV, n + fvgExt, botV
+                  , bgcolor      = color.new(cWFVGbr, cWFVGbrFill)
+                  , border_color = color.new(cWFVGbr, cWFVGbrBord)
+                  , border_style = lineStyleOf(wfvgbrBordSt)
+                  , text         = '')
+        lb = showWFvgLab
+             ? label.new(labelX(n - 2, n + fvgExt, wfvgLabPos, wfvgLabXOff), math.avg(topV, botV)
+                  , text      = wfvgBrLabText
+                  , textcolor = wfvgBrLabTxt
+                  , color     = wfvgLabBg
+                  , style     = labStyleOf(wfvgBrLabStyle, false)
+                  , size      = sizeOf(wfvgLabSize))
+             : label(na)
+        aWFVG_DN.unshift(FVGZone.new(bx, lb, line(na), true, 0, n - 2, topV, botV))
+        if aWFVG_DN.size() > visWeakFVG
+            old = aWFVG_DN.pop()
+            old.bx.delete()
+            if not na(old.lb)
+                old.lb.delete()
+
+// =============================================================================
+// FVG: MITIGATION  (STRONG)
+// =============================================================================
+if shwFVG and aFVG_UP.size() > 0
+    for i = 0 to math.min(bxBack, aFVG_UP.size() - 1)
+        z = aFVG_UP.get(i)
+        if z.active
+            z.bx.set_right(n + fvgExt)
+            if not na(z.lb)
+                z.lb.set_x(labelX(z.left, n + fvgExt, fvgBlLabPos, fvgBlLabXOff))
+            if not na(z.mid)
+                z.mid.set_x2(n + fvgExt)
+            if fvgPartLn and low < z.bx.get_top()
+                z.bx.set_border_style(line.style_dashed)
+            if (fvgMitMethod == 'Close' ? close < z.bx.get_bottom() : low < z.bx.get_bottom())
+                z.bx.set_bgcolor(color.new(cFVGblBR, cFVGblBRTr))
+                z.bx.set_border_color(color.new(cFVGblBR, cFVGblBRTr))
+                z.bx.set_border_style(line.style_dotted)
+                z.bx.set_right(n)
+                if not na(z.lb)
+                    z.lb.set_x(labelX(z.left, n, fvgBlLabPos, fvgBlLabXOff))
+                if not na(z.mid)
+                    z.mid.set_x2(n)
+                z.active := false
+
+if shwFVG and aFVG_DN.size() > 0
+    for i = 0 to math.min(bxBack, aFVG_DN.size() - 1)
+        z = aFVG_DN.get(i)
+        if z.active
+            z.bx.set_right(n + fvgExt)
+            if not na(z.lb)
+                z.lb.set_x(labelX(z.left, n + fvgExt, fvgBrLabPos, fvgBrLabXOff))
+            if not na(z.mid)
+                z.mid.set_x2(n + fvgExt)
+            if fvgPartLn and high > z.bx.get_bottom()
+                z.bx.set_border_style(line.style_dashed)
+            if (fvgMitMethod == 'Close' ? close > z.bx.get_top() : high > z.bx.get_top())
+                z.bx.set_bgcolor(color.new(cFVGbrBR, cFVGbrBRTr))
+                z.bx.set_border_color(color.new(cFVGbrBR, cFVGbrBRTr))
+                z.bx.set_border_style(line.style_dotted)
+                z.bx.set_right(n)
+                if not na(z.lb)
+                    z.lb.set_x(labelX(z.left, n, fvgBrLabPos, fvgBrLabXOff))
+                if not na(z.mid)
+                    z.mid.set_x2(n)
+                z.active := false
+
+// =============================================================================
+// FVG: MITIGATION  (WEAK)  — NEW IN v1.7
+// =============================================================================
+if shwFVG and showAllFVG and aWFVG_UP.size() > 0
+    for i = 0 to math.min(bxBack, aWFVG_UP.size() - 1)
+        z = aWFVG_UP.get(i)
+        if z.active
+            z.bx.set_right(n + fvgExt)
+            if not na(z.lb)
+                z.lb.set_x(labelX(z.left, n + fvgExt, wfvgLabPos, wfvgLabXOff))
+            if fvgPartLn and low < z.bx.get_top()
+                z.bx.set_border_style(line.style_dashed)
+            if (fvgMitMethod == 'Close' ? close < z.bx.get_bottom() : low < z.bx.get_bottom())
+                z.bx.set_bgcolor(color.new(cWFVGblBR, cWFVGblBRTr))
+                z.bx.set_border_color(color.new(cWFVGblBR, cWFVGblBRTr))
+                z.bx.set_border_style(line.style_dotted)
+                z.bx.set_right(n)
+                if not na(z.lb)
+                    z.lb.set_x(labelX(z.left, n, wfvgLabPos, wfvgLabXOff))
+                z.active := false
+
+if shwFVG and showAllFVG and aWFVG_DN.size() > 0
+    for i = 0 to math.min(bxBack, aWFVG_DN.size() - 1)
+        z = aWFVG_DN.get(i)
+        if z.active
+            z.bx.set_right(n + fvgExt)
+            if not na(z.lb)
+                z.lb.set_x(labelX(z.left, n + fvgExt, wfvgLabPos, wfvgLabXOff))
+            if fvgPartLn and high > z.bx.get_bottom()
+                z.bx.set_border_style(line.style_dashed)
+            if (fvgMitMethod == 'Close' ? close > z.bx.get_top() : high > z.bx.get_top())
+                z.bx.set_bgcolor(color.new(cWFVGbrBR, cWFVGbrBRTr))
+                z.bx.set_border_color(color.new(cWFVGbrBR, cWFVGbrBRTr))
+                z.bx.set_border_style(line.style_dotted)
+                z.bx.set_right(n)
+                if not na(z.lb)
+                    z.lb.set_x(labelX(z.left, n, wfvgLabPos, wfvgLabXOff))
+                z.active := false
+
+// =============================================================================
+// BPR: DETECTION  (ported from BPR [TFO] — look back up to N bars for an opposing FVG)
+// =============================================================================
+bpr_fvg_bear = low[2] - high  > 0
+bpr_fvg_bull = low  - high[2] > 0
+
+bull_ns    = ta.barssince(bpr_fvg_bear)
+bull_c1    = bpr_fvg_bull and not na(bull_ns) and bull_ns <= bprBarsSince
+bull_ns_s  = nz(math.min(bull_ns, bprBarsSince), 0)
+bull_clow  = bull_c1 ? math.max(high[bull_ns_s],     high[2]) : na
+bull_chigh = bull_c1 ? math.min(low [bull_ns_s + 2], low)     : na
+bull_clean = true
+if bull_c1 and bprCleanOnly and bull_ns_s >= 2
+    for h = 2 to bull_ns_s
+        if high[h] > bull_clow
+            bull_clean := false
+bull_valid = bull_c1 and bull_clean and (bull_chigh - bull_clow >= bprThreshold)
+
+if shwBPR and bull_valid[1]
+    leftX  = n - bull_ns_s[1] - 2
+    topV   = bull_chigh[1]
+    botV   = bull_clow[1]
+    rightX = n + bprExt
+    bx = box.new(leftX, topV, rightX, botV
+             , bgcolor      = color.new(cBPRbl, cBPRblFill)
+             , border_color = color.new(cBPRbl, cBPRblBord)
+             , border_style = lineStyleOf(bprblBordSt))
+    lb = showBprBlLab
+         ? label.new(labelX(leftX, rightX, bprBlLabPos, bprBlLabXOff), math.avg(topV, botV)
+             , text      = bprBlLabText
+             , textcolor = bprBlLabTxt
+             , color     = bprBlLabBg
+             , style     = labStyleOf(bprBlLabStyle, true)
+             , size      = sizeOf(bprBlLabSize))
+         : label(na)
+    mid = showBprMid ? line.new(leftX, math.avg(topV, botV), rightX, math.avg(topV, botV), color=bprMidColor, style=lineStyleOf(bprMidStyle), width=bprMidWidth) : line(na)
+    posDir = close > topV ? 1 : close < botV ? -1 : 0
+    aBPR_UP.unshift(FVGZone.new(bx, lb, mid, true, posDir, leftX, topV, botV))
+    if aBPR_UP.size() > visBPR
+        old = aBPR_UP.pop()
+        old.bx.delete()
+        if not na(old.lb)
+            old.lb.delete()
+        if not na(old.mid)
+            old.mid.delete()
+
+bear_ns    = ta.barssince(bpr_fvg_bull)
+bear_c1    = bpr_fvg_bear and not na(bear_ns) and bear_ns <= bprBarsSince
+bear_ns_s  = nz(math.min(bear_ns, bprBarsSince), 0)
+bear_clow  = bear_c1 ? math.max(high[bear_ns_s + 2], high)    : na
+bear_chigh = bear_c1 ? math.min(low [bear_ns_s],     low[2])  : na
+bear_clean = true
+if bear_c1 and bprCleanOnly and bear_ns_s >= 2
+    for h = 2 to bear_ns_s
+        if low[h] < bear_chigh
+            bear_clean := false
+bear_valid = bear_c1 and bear_clean and (bear_chigh - bear_clow >= bprThreshold)
+
+if shwBPR and bear_valid[1]
+    leftX  = n - bear_ns_s[1] - 2
+    topV   = bear_chigh[1]
+    botV   = bear_clow[1]
+    rightX = n + bprExt
+    bx = box.new(leftX, topV, rightX, botV
+             , bgcolor      = color.new(cBPRbr, cBPRbrFill)
+             , border_color = color.new(cBPRbr, cBPRbrBord)
+             , border_style = lineStyleOf(bprbrBordSt))
+    lb = showBprBrLab
+         ? label.new(labelX(leftX, rightX, bprBrLabPos, bprBrLabXOff), math.avg(topV, botV)
+             , text      = bprBrLabText
+             , textcolor = bprBrLabTxt
+             , color     = bprBrLabBg
+             , style     = labStyleOf(bprBrLabStyle, false)
+             , size      = sizeOf(bprBrLabSize))
+         : label(na)
+    mid = showBprMid ? line.new(leftX, math.avg(topV, botV), rightX, math.avg(topV, botV), color=bprMidColor, style=lineStyleOf(bprMidStyle), width=bprMidWidth) : line(na)
+    posDir = close > topV ? 1 : close < botV ? -1 : 0
+    aBPR_DN.unshift(FVGZone.new(bx, lb, mid, true, posDir, leftX, topV, botV))
+    if aBPR_DN.size() > visBPR
+        old = aBPR_DN.pop()
+        old.bx.delete()
+        if not na(old.lb)
+            old.lb.delete()
+        if not na(old.mid)
+            old.mid.delete()
+
+// =============================================================================
+// BPR: MITIGATION
+// =============================================================================
+if shwBPR and aBPR_UP.size() > 0
+    for i = 0 to math.min(bxBack, aBPR_UP.size() - 1)
+        z = aBPR_UP.get(i)
+        if z.active
+            z.bx.set_right(n + bprExt)
+            if not na(z.lb)
+                z.lb.set_x(labelX(z.left, n + bprExt, bprBlLabPos, bprBlLabXOff))
+            if not na(z.mid)
+                z.mid.set_x2(n + bprExt)
+            if z.pos == -1
+                if bprPartLn and high > z.bx.get_bottom()
+                    z.bx.set_border_style(line.style_dashed)
+                if (bprMitMethod == 'Close' ? close > z.bx.get_top() : high > z.bx.get_top())
+                    z.bx.set_bgcolor(color.new(cBPRblBR, cBPRblBRTr))
+                    z.bx.set_border_color(color.new(cBPRblBR, cBPRblBRTr))
+                    z.bx.set_border_style(line.style_dotted)
+                    z.bx.set_right(n)
+                    if not na(z.lb)
+                        z.lb.set_x(labelX(z.left, n, bprBlLabPos, bprBlLabXOff))
+                    if not na(z.mid)
+                        z.mid.set_x2(n)
+                    z.active := false
+            if z.pos == 1
+                if bprPartLn and low < z.bx.get_top()
+                    z.bx.set_border_style(line.style_dashed)
+                if (bprMitMethod == 'Close' ? close < z.bx.get_bottom() : low < z.bx.get_bottom())
+                    z.bx.set_bgcolor(color.new(cBPRblBR, cBPRblBRTr))
+                    z.bx.set_border_color(color.new(cBPRblBR, cBPRblBRTr))
+                    z.bx.set_border_style(line.style_dotted)
+                    z.bx.set_right(n)
+                    if not na(z.lb)
+                        z.lb.set_x(labelX(z.left, n, bprBlLabPos, bprBlLabXOff))
+                    if not na(z.mid)
+                        z.mid.set_x2(n)
+                    z.active := false
+
+if shwBPR and aBPR_DN.size() > 0
+    for i = 0 to math.min(bxBack, aBPR_DN.size() - 1)
+        z = aBPR_DN.get(i)
+        if z.active
+            z.bx.set_right(n + bprExt)
+            if not na(z.lb)
+                z.lb.set_x(labelX(z.left, n + bprExt, bprBrLabPos, bprBrLabXOff))
+            if not na(z.mid)
+                z.mid.set_x2(n + bprExt)
+            if z.pos == -1
+                if bprPartLn and high > z.bx.get_bottom()
+                    z.bx.set_border_style(line.style_dashed)
+                if (bprMitMethod == 'Close' ? close > z.bx.get_top() : high > z.bx.get_top())
+                    z.bx.set_bgcolor(color.new(cBPRbrBR, cBPRbrBRTr))
+                    z.bx.set_border_color(color.new(cBPRbrBR, cBPRbrBRTr))
+                    z.bx.set_border_style(line.style_dotted)
+                    z.bx.set_right(n)
+                    if not na(z.lb)
+                        z.lb.set_x(labelX(z.left, n, bprBrLabPos, bprBrLabXOff))
+                    if not na(z.mid)
+                        z.mid.set_x2(n)
+                    z.active := false
+            if z.pos == 1
+                if bprPartLn and low < z.bx.get_top()
+                    z.bx.set_border_style(line.style_dashed)
+                if (bprMitMethod == 'Close' ? close < z.bx.get_bottom() : low < z.bx.get_bottom())
+                    z.bx.set_bgcolor(color.new(cBPRbrBR, cBPRbrBRTr))
+                    z.bx.set_border_color(color.new(cBPRbrBR, cBPRbrBRTr))
+                    z.bx.set_border_style(line.style_dotted)
+                    z.bx.set_right(n)
+                    if not na(z.lb)
+                        z.lb.set_x(labelX(z.left, n, bprBrLabPos, bprBrLabXOff))
+                    if not na(z.mid)
+                        z.mid.set_x2(n)
+                    z.active := false
+
+// =============================================================================
+// MARKET STRUCTURE (MSS / BOS) — CALCULATIONS
+// =============================================================================
+zz_in_out(int d, int x2, float y2) =>
+    aZZ.d.unshift(d)
+    aZZ.x.unshift(x2)
+    aZZ.y.unshift(y2)
+    aZZ.d.pop()
+    aZZ.x.pop()
+    aZZ.y.pop()
+
+clear_lines_arr(array<line> a) =>
+    while a.size() > 0
+        a.pop().delete()
+
+clear_labels_arr(array<label> a) =>
+    while a.size() > 0
+        a.pop().delete()
+
+mk_ms_line(int idx, color col, string sty, int wid) =>
+    line.new(aZZ.x.get(idx), aZZ.y.get(idx), n, aZZ.y.get(idx), color=col, style=lineStyleOf(sty), width=wid)
+
+mk_ms_label(int idx, string txt, string sizeStr, string styleStr, bool isUp, color txCol, color bgCol) =>
+    label.new(math.round(math.avg(aZZ.x.get(idx), n)), aZZ.y.get(idx)
+         , text=txt
+         , style=labStyleOf(styleStr, isUp)
+         , color=bgCol
+         , textcolor=txCol
+         , size=sizeOf(sizeStr))
+
+// --- alert signal flags for this bar (set inside the block below) — NEW IN v1.8 ---
+bool  sigMssBull = false
+bool  sigMssBear = false
+bool  sigBosBull = false
+bool  sigBosBear = false
+float sigLevel   = na
+
+if shwMS
+    ph_ms = ta.pivothigh(high, msLen, 1)
+    pl_ms = ta.pivotlow (low,  msLen, 1)
+    x2_ms = n - 1
+
+    if not na(ph_ms)
+        dir_z = aZZ.d.get(0)
+        y2_z  = nz(high[1])
+        if dir_z < 1
+            zz_in_out(1, x2_ms, y2_z)
+        else
+            if dir_z == 1 and ph_ms > aZZ.y.get(0)
+                aZZ.x.set(0, x2_ms)
+                aZZ.y.set(0, y2_z)
+
+    if not na(pl_ms)
+        dir_z = aZZ.d.get(0)
+        y2_z  = nz(low[1])
+        if dir_z > -1
+            zz_in_out(-1, x2_ms, y2_z)
+        else
+            if dir_z == -1 and pl_ms < aZZ.y.get(0)
+                aZZ.x.set(0, x2_ms)
+                aZZ.y.set(0, y2_z)
+
+    iH = aZZ.d.get(2) ==  1 ? 2 : 1
+    iL = aZZ.d.get(2) == -1 ? 2 : 1
+
+    if close > aZZ.y.get(iH) and aZZ.d.get(iH) ==  1 and mss.dir <  1
+        mss.dir := 1
+        sigMssBull := true
+        sigLevel   := aZZ.y.get(iH)
+        if i_mode == 'Present'
+            clear_lines_arr (mss.l_bosBl)
+            clear_lines_arr (mss.l_bosBr)
+            clear_labels_arr(mss.lbBosBl)
+            clear_labels_arr(mss.lbBosBr)
+            clear_lines_arr (mss.l_mssBl)
+            clear_lines_arr (mss.l_mssBr)
+            clear_labels_arr(mss.lbMssBl)
+            clear_labels_arr(mss.lbMssBr)
+        if iMSS
+            mss.l_mssBl.unshift(mk_ms_line(iH, cMSSbl, mssBlLineStyle, mssBlLineWidth))
+            if showMssBlLab
+                mss.lbMssBl.unshift(mk_ms_label(iH, mssBlLabText, mssBlLabSize, mssBlLabStyle, false, mssBlLabTxt, mssBlLabBg))
+    else if close < aZZ.y.get(iL) and aZZ.d.get(iL) == -1 and mss.dir > -1
+        mss.dir := -1
+        sigMssBear := true
+        sigLevel   := aZZ.y.get(iL)
+        if i_mode == 'Present'
+            clear_lines_arr (mss.l_bosBl)
+            clear_lines_arr (mss.l_bosBr)
+            clear_labels_arr(mss.lbBosBl)
+            clear_labels_arr(mss.lbBosBr)
+            clear_lines_arr (mss.l_mssBl)
+            clear_lines_arr (mss.l_mssBr)
+            clear_labels_arr(mss.lbMssBl)
+            clear_labels_arr(mss.lbMssBr)
+        if iMSS
+            mss.l_mssBr.unshift(mk_ms_line(iL, cMSSbr, mssBrLineStyle, mssBrLineWidth))
+            if showMssBrLab
+                mss.lbMssBr.unshift(mk_ms_label(iL, mssBrLabText, mssBrLabSize, mssBrLabStyle, true, mssBrLabTxt, mssBrLabBg))
+    else if mss.dir ==  1 and close > aZZ.y.get(iH) and iBOS
+        addBos = true
+        if mss.l_bosBl.size() > 0
+            if aZZ.y.get(iH) == mss.l_bosBl.get(0).get_y2()
+                addBos := false
+        if mss.l_mssBl.size() > 0
+            if aZZ.y.get(iH) == mss.l_mssBl.get(0).get_y2()
+                addBos := false
+        if addBos
+            sigBosBull := true
+            sigLevel   := aZZ.y.get(iH)
+            mss.l_bosBl.unshift(mk_ms_line(iH, cBOSbl, bosBlLineStyle, bosBlLineWidth))
+            if showBosBlLab
+                mss.lbBosBl.unshift(mk_ms_label(iH, bosBlLabText, bosBlLabSize, bosBlLabStyle, false, bosBlLabTxt, bosBlLabBg))
+    else if mss.dir == -1 and close < aZZ.y.get(iL) and iBOS
+        addBos = true
+        if mss.l_bosBr.size() > 0
+            if aZZ.y.get(iL) == mss.l_bosBr.get(0).get_y2()
+                addBos := false
+        if mss.l_mssBr.size() > 0
+            if aZZ.y.get(iL) == mss.l_mssBr.get(0).get_y2()
+                addBos := false
+        if addBos
+            sigBosBear := true
+            sigLevel   := aZZ.y.get(iL)
+            mss.l_bosBr.unshift(mk_ms_line(iL, cBOSbr, bosBrLineStyle, bosBrLineWidth))
+            if showBosBrLab
+                mss.lbBosBr.unshift(mk_ms_label(iL, bosBrLabText, bosBrLabSize, bosBrLabStyle, true, bosBrLabTxt, bosBrLabBg))
+
+if mss.l_bosBl.size() > maxMSLines
+    mss.l_bosBl.pop().delete()
+    if mss.lbBosBl.size() > 0
+        mss.lbBosBl.pop().delete()
+if mss.l_bosBr.size() > maxMSLines
+    mss.l_bosBr.pop().delete()
+    if mss.lbBosBr.size() > 0
+        mss.lbBosBr.pop().delete()
+
+// =============================================================================
+// ALERTS (MSS / BOS) — FIRING  — NEW IN v1.8
+// =============================================================================
+okBar = not alertOnClose or barstate.isconfirmed
+
+fireMssBull = sigMssBull and alertMssBull and okBar
+fireMssBear = sigMssBear and alertMssBear and okBar
+fireBosBull = sigBosBull and alertBosBull and okBar
+fireBosBear = sigBosBear and alertBosBear and okBar
+fireAnyMss  = fireMssBull or fireMssBear
+fireAnyBos  = fireBosBull or fireBosBear
+
+// --- named conditions: pick these by name in the TradingView alert dialog ---
+alertcondition(fireMssBull,              title='MSS Bullish',       message='Bullish MSS — {{ticker}} {{interval}} @ {{close}}')
+alertcondition(fireMssBear,              title='MSS Bearish',       message='Bearish MSS — {{ticker}} {{interval}} @ {{close}}')
+alertcondition(fireBosBull,              title='BOS Bullish',       message='Bullish BOS — {{ticker}} {{interval}} @ {{close}}')
+alertcondition(fireBosBear,              title='BOS Bearish',       message='Bearish BOS — {{ticker}} {{interval}} @ {{close}}')
+alertcondition(fireAnyMss,               title='MSS (any)',         message='MSS — {{ticker}} {{interval}} @ {{close}}')
+alertcondition(fireAnyBos,               title='BOS (any)',         message='BOS — {{ticker}} {{interval}} @ {{close}}')
+alertcondition(fireAnyMss or fireAnyBos, title='MSS or BOS (any)',  message='Structure event (MSS/BOS) — {{ticker}} {{interval}} @ {{close}}')
+
+// --- dynamic messages: create ONE alert using "Any alert() function call" ---
+pfx(string s) =>
+    alertPrefix == '' ? s : alertPrefix + ' ' + s
+
+msgOf(string kind, string dir, float lvl) =>
+    pfx(dir + ' ' + kind + ' | ' + syminfo.ticker + ' | ' + timeframe.period + ' | level ' + str.tostring(lvl, format.mintick) + ' | close ' + str.tostring(close, format.mintick))
+
+if fireMssBull
+    alert(msgOf('MSS', 'Bullish', sigLevel), alert.freq_once_per_bar)
+if fireMssBear
+    alert(msgOf('MSS', 'Bearish', sigLevel), alert.freq_once_per_bar)
+if fireBosBull
+    alert(msgOf('BOS', 'Bullish', sigLevel), alert.freq_once_per_bar)
+if fireBosBear
+    alert(msgOf('BOS', 'Bearish', sigLevel), alert.freq_once_per_bar)
+
+// =============================================================================
+// LIQUIDITY SWEEPS — CALCULATIONS
+// =============================================================================
+if shwLiq
+    prevRecentHigh = ta.highest(high[1], liqLookback)
+    prevRecentLow  = ta.lowest (low[1],  liqLookback)
+
+    buySideSweep  = high > prevRecentHigh and close < prevRecentHigh and close < open
+    sellSideSweep = low  < prevRecentLow  and close > prevRecentLow  and close > open
+
+    if buySideSweep and showBuyLab
+        label.new(n, high
+             , text      = buyLabText
+             , yloc      = yloc.abovebar
+             , color     = buyLabBg
+             , textcolor = buyLabTxt
+             , style     = labStyleOf(buyLabStyle, false)
+             , size      = sizeOf(buyLabSize))
+
+    if sellSideSweep and showSellLab
+        label.new(n, low
+             , text      = sellLabText
+             , yloc      = yloc.belowbar
+             , color     = sellLabBg
+             , textcolor = sellLabTxt
+             , style     = labStyleOf(sellLabStyle, true)
+             , size      = sizeOf(sellLabSize))
+
+// =============================================================================
+// EQUAL HIGHS / LOWS — CALCULATIONS
+// =============================================================================
+if shwEQ
+    eqPh = ta.pivothigh(high, eqLen, eqLen)
+    eqPl = ta.pivotlow (low,  eqLen, eqLen)
+
+    if not na(eqPh)
+        eqPriorSwingHigh    := eqLastSwingHigh
+        eqPriorSwingHighBar := eqLastSwingHighBar
+        eqLastSwingHigh     := eqPh
+        eqLastSwingHighBar  := n - eqLen
+
+    if not na(eqPl)
+        eqPriorSwingLow     := eqLastSwingLow
+        eqPriorSwingLowBar  := eqLastSwingLowBar
+        eqLastSwingLow      := eqPl
+        eqLastSwingLowBar   := n - eqLen
+
+    if not na(eqPh) and not na(eqPriorSwingHigh) and not na(eqPriorSwingHighBar)
+        tol = eqLastSwingHigh * eqTolerance / 100
+        if math.abs(eqLastSwingHigh - eqPriorSwingHigh) <= tol
+            eqLvl = math.avg(eqLastSwingHigh, eqPriorSwingHigh)
+            ln = line.new(eqPriorSwingHighBar, eqLvl, n + eqExtBars, eqLvl
+                     , color = eqhLineColor
+                     , style = lineStyleOf(eqhLineStyle)
+                     , width = eqhLineWidth)
+            eqLines.unshift(ln)
+            if showEqhLab
+                lb = label.new(n - eqLen, eqLvl
+                         , text      = eqhLabText
+                         , yloc      = yloc.price
+                         , color     = eqhLabBg
+                         , textcolor = eqhLabTxt
+                         , style     = labStyleOf(eqhLabStyle, false)
+                         , size      = sizeOf(eqhLabSize))
+                eqLabels.unshift(lb)
+            if eqLines.size() > maxEqLines
+                eqLines.pop().delete()
+            if eqLabels.size() > maxEqLines
+                eqLabels.pop().delete()
+
+    if not na(eqPl) and not na(eqPriorSwingLow) and not na(eqPriorSwingLowBar)
+        tol = eqLastSwingLow * eqTolerance / 100
+        if math.abs(eqLastSwingLow - eqPriorSwingLow) <= tol
+            eqLvl = math.avg(eqLastSwingLow, eqPriorSwingLow)
+            ln = line.new(eqPriorSwingLowBar, eqLvl, n + eqExtBars, eqLvl
+                     , color = eqlLineColor
+                     , style = lineStyleOf(eqlLineStyle)
+                     , width = eqlLineWidth)
+            eqLines.unshift(ln)
+            if showEqlLab
+                lb = label.new(n - eqLen, eqLvl
+                         , text      = eqlLabText
+                         , yloc      = yloc.price
+                         , color     = eqlLabBg
+                         , textcolor = eqlLabTxt
+                         , style     = labStyleOf(eqlLabStyle, true)
+                         , size      = sizeOf(eqlLabSize))
+                eqLabels.unshift(lb)
+            if eqLines.size() > maxEqLines
+                eqLines.pop().delete()
+            if eqLabels.size() > maxEqLines
+                eqLabels.pop().delete()
