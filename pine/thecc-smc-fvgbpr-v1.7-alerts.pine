@@ -1,35 +1,39 @@
 //@version=6
-// =============================================================================
-// SMC TOOLKIT v1.8 — FVG / weak FVG / BPR / MSS-BOS / Liquidity / EQH-EQL
-//   v1.8: added MSS + BOS alerts (alertcondition() named conditions and
-//         dynamic alert() messages). No changes to any detection logic.
-// =============================================================================
-indicator('SMC Toolkit v1.8 — FVG / BPR / MSS-BOS / Liquidity / EQH-EQL'
-     , shorttitle        = 'SMC v1.8'
-     , overlay           = true
-     , max_boxes_count   = 500
-     , max_labels_count  = 500
-     , max_lines_count   = 500)
+indicator("THECC SMC Smart FVGBPR Pro Tool v1.7", "FVGBPRv1.7", overlay=true, max_boxes_count=500, max_labels_count=500, max_lines_count=500, max_bars_back=3000)
+
+// v1.7 changes vs v1.6:
+//   - NEW "Show ALL FVGs" master toggle (default OFF = identical v1.6 behavior).
+//     When ON, every geometric 3-candle FVG is drawn. Gaps that FAIL the displacement
+//     test ("weak" FVGs — long rejection/sweep wick, or small-body drift) render in a
+//     separate, dimmer/dashed style with their own label so quality stays readable.
+//   - Full styling controls for the weak tier (box color/fill/border, mitigated fill,
+//     labels) + an in-settings explanation tooltip on the toggle.
+//
+// v1.6 changes vs v1.5:
+//   - BPR detection rebuilt on the TFO look-back-overlap algorithm: when a new FVG forms, scan back up to
+//     "BPR lookback" bars for an opposing FVG and take their overlap. Catches the BPRs v1.5 missed.
+//   - Optional dotted 50% MIDPOINT line for both BPRs and FVGs (toggle + color/style/width).
+//   - BPR and FVG mitigation method: Wick or candle-body Close.
 
 // =============================================================================
-// GENERAL   >>> RECONSTRUCTED HEADER — replace with your originals if different
+// MODE
 // =============================================================================
-gGEN      = '═══ General ═══'
-i_mode    = input.string('Present', title='Mode', group=gGEN, options=['Present','Historical'], tooltip='Present = only build zones inside the recent lookback window (lighter, and MSS clears old structure lines). Historical = build across the whole chart.')
-visRange  = input.int   (500,       title='Present mode lookback (bars)', group=gGEN, minval=10, maxval=5000)
-detectSrc = input.string('FVG',     title='Detection source', group=gGEN, options=['FVG','IFVG'])
+gM = 'General'
+i_mode    = input.string('Historical', title='Mode',                  group=gM, options=['Present','Historical'])
+visRange  = input.int   (500,        title='Present lookback bars', group=gM, minval=50, maxval=5000)
+detectSrc = input.string('FVG',      title='Gap Detection Type',    group=gM, options=['FVG','IFVG'], tooltip='FVG = standard 3-bar imbalance.  IFVG = inverted FVG detection.')
 
-gFVG         = '═══ Fair Value Gaps (FVG) ═══'
-shwFVG       = input.bool  (true,    title='Show FVGs',                       group=gFVG)
-visFVG       = input.int   (5,       title='# Visible FVGs each side',        group=gFVG, minval=1, maxval=20)
-fvgExt       = input.int   (8,       title='Extend bars to right',            group=gFVG, minval=1, maxval=500)
-fvgPartLn    = input.bool  (true,    title='Dash border on partial mitigation', group=gFVG)
-fvgMitMethod = input.string('Close', title='FVG mitigation (Wick / Close)',   group=gFVG, options=['Wick','Close'], tooltip='Close (default) = the FVG stays alive until a candle BODY closes fully through it. Wick = any high/low piercing the far side mitigates it.')
+// =============================================================================
+// FAIR VALUE GAP (FVG)
+// =============================================================================
+gFVG = '═══ Fair Value Gap (FVG) ═══'
+shwFVG    = input.bool(true,  title='Show FVGs',                group=gFVG)
+visFVG    = input.int (5,     title='# Visible FVGs each side', group=gFVG, minval=1, maxval=20)
+fvgExt    = input.int (8,     title='Extend bars to right',     group=gFVG, minval=1, maxval=500)
+fvgPartLn = input.bool(true,  title='Dash border on partial mitigation', group=gFVG)
+fvgMitMethod = input.string('Wick', title='FVG mitigation (Wick / Close)', group=gFVG, options=['Wick','Close'], tooltip='Wick (default) = a high/low piercing the gap mitigates it. Close = the gap stays alive until a candle BODY closes fully through it.')
 
 gFB = '── Bullish FVG box ──'
-// =============================================================================
-// END RECONSTRUCTED HEADER
-// =============================================================================
 cFVGbl       = input.color (color.new(#00e676, 0),  title='Color',          group=gFB, inline='b1')
 cFVGblFill   = input.int   (88,                      title='Fill transp',    group=gFB, inline='b1', minval=0, maxval=100)
 cFVGblBord   = input.int   (55,                      title='Border transp',  group=gFB, inline='b2', minval=0, maxval=100)
@@ -218,7 +222,7 @@ bosBrLabTxt    = input.color (color.red,                title='Text color',    g
 bosBrLabBg     = input.color (color.new(#000000, 100),  title='Background',    group=gBOSbr, inline='bosbr2')
 
 // =============================================================================
-// ALERTS (MSS / BOS) — NEW IN v1.8
+// ALERTS (MSS / BOS)
 // =============================================================================
 gALRT = '═══ Alerts (MSS / BOS) ═══'
 alertOnClose = input.bool  (true, title='Fire on bar close only (recommended)', group=gALRT, tooltip='ON = the alert only fires once the bar has CLOSED, so a break that gets un-done intrabar never alerts you (no repaint, no premature alert). OFF = fires the instant price trades through the level — faster, but the break can fail before the close.')
@@ -827,7 +831,7 @@ mk_ms_label(int idx, string txt, string sizeStr, string styleStr, bool isUp, col
          , textcolor=txCol
          , size=sizeOf(sizeStr))
 
-// --- alert signal flags for this bar (set inside the block below) — NEW IN v1.8 ---
+// --- alert signal flags for this bar (set inside the block below) ---
 bool  sigMssBull = false
 bool  sigMssBear = false
 bool  sigBosBull = false
@@ -935,7 +939,7 @@ if mss.l_bosBr.size() > maxMSLines
         mss.lbBosBr.pop().delete()
 
 // =============================================================================
-// ALERTS (MSS / BOS) — FIRING  — NEW IN v1.8
+// ALERTS (MSS / BOS) — FIRING 
 // =============================================================================
 okBar = not alertOnClose or barstate.isconfirmed
 

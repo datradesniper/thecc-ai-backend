@@ -1,0 +1,944 @@
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// Original ©TRADESNIPER
+// Adapted by Maxime: ported to v6 + Fix / Multi-Fix TF modes
+//
+// v2.0 changes:
+//   - NEW Market Structure: MSS (Market Structure Shift) and BOS (Break of Structure),
+//     ported from THECC SMC Smart FVGBPR Pro Tool v1.7. Fully customizable
+//     (line color/width/style + label text/size/style/colors per direction).
+//   - NEW Equal Highs / Equal Lows (EQH / EQL) with tolerance, extension and full styling.
+//   - NEW alerts: MSS, BOS and EQH/EQL — as named alertcondition() entries AND as
+//     dynamic alert() messages carrying direction, ticker, timeframe and level.
+//   - Settings menu is now entirely in English.
+//   - FVG detection, volume bars, Skull Mode and multi-TF rendering are UNCHANGED.
+//
+// Note: MSS / BOS / EQH / EQL are computed on the CHART timeframe (the drawings are
+// anchored to chart bars). The Fix / Multi-Fix timeframe modes still apply to the FVGs.
+
+//@version=6
+const bool DEBUG = false
+const int  maxBoxesCount              = 500
+const int  showLastXFVGs              = 125
+const int  extendLastXFVGsCount       = 3
+const int  minimumFVGSize             = 3
+const float overlapThresholdPercentage = 0
+const int  maxDistanceToLastBar       = 10000
+const int  atrLen                     = 10
+
+indicator(title = 'THECC Fair Value Gaps PRO', shorttitle = "THECC FVG PRO", overlay = true, max_boxes_count = maxBoxesCount, max_labels_count = maxBoxesCount, max_lines_count = maxBoxesCount, max_bars_back = 5000)
+
+// ═══════════════════════════════════════════════
+// TF MODE
+// ═══════════════════════════════════════════════
+tfModeGroup = "⊹ Timeframe Mode"
+tfMode = input.string("Auto", "Mode", options = ["Auto", "Fix", "Multi-Fix"], group = tfModeGroup, tooltip = "Auto: the chart's current timeframe\nFix: lock onto a single timeframe\nMulti-Fix: up to 4 timeframes at once")
+fixTF  = input.timeframe("15", "Fix TF", options = ["", "1", "5", "15", "30", "60", "120", "240", "D"], group = tfModeGroup)
+
+mtfGroup = "⊹ Multi-Fix Timeframes"
+includeCurrent = input.bool(false, "Include the chart's current timeframe", group = mtfGroup)
+mtf1 = input.string("5",  "TF #1", options = ["", "1", "5", "15", "30", "60", "120", "240", "D"], group = mtfGroup)
+mtf2 = input.string("15", "TF #2", options = ["", "1", "5", "15", "30", "60", "120", "240", "D"], group = mtfGroup)
+mtf3 = input.string("60", "TF #3", options = ["", "1", "5", "15", "30", "60", "120", "240", "D"], group = mtfGroup)
+mtf4 = input.string("",   "TF #4", options = ["", "1", "5", "15", "30", "60", "120", "240", "D"], group = mtfGroup)
+
+// ═══════════════════════════════════════════════
+// FVG INPUTS — unchanged behavior
+// ═══════════════════════════════════════════════
+fvgEndMethod = input.string("Close", "Zone Invalidation", options = ["Wick", "Close"], group = "General Configuration")
+fvgFilterMethod = input.string("Average Range", "Zone Filtering", options = ["Average Range", "Volume Threshold"], group = "General Configuration")
+volumeThresholdPercent = input.int(50, "Volume Threshold %", group = "General Configuration", tooltip = "Only taken into calculation when filter method is Volume Threshold.", minval = 1, maxval = 200)
+fvgBars = input.string("Same Type", "FVG Detection", options = ["Same Type", "All"], tooltip = "Same Type -> All 3 bars same type. \n\nAll -> Bar types may vary.", group = "General Configuration")
+fvgSensEnabled = input.bool(true, "", inline = "sens", group = "General Configuration")
+fvgSensitivityText = input.string("Extreme", "Detection Sensitivity", options = ["Extreme", "High", "Normal", "Low"], inline = "sens", group = "General Configuration")
+combineFVGs = true
+allowGaps = input.bool(false, "Allow Gaps Between Bars", group = "General Configuration")
+deleteUntouched = true
+deleteUntouchedAfterXBars = 200
+showInvalidated = input.bool(true, "Show Historic Zones", group = "General Configuration")
+
+bullColor = input.color(color.new(#089981, 50), "Bull Color", group = "Style", inline = "BBcolors")
+bearColor = input.color(color.new(#f23645, 50), "Bear Color", group = "Style", inline = "BBcolors")
+textColor = input.color(color.new(#ffffff, 50), "Text Color", group = "Style", inline = "BBcolors")
+
+// Skull mode
+skullGroup    = "💀 Skull Mode"
+skullEnabled  = input.bool(false, "Enable Skull Mode", group = skullGroup, tooltip = "Shows only the mid line + volume bars in a very discreet grey / black style")
+skullBullCol  = input.color(color.new(#cccccc, 96), "Bull (light grey)", group = skullGroup)
+skullBearCol  = input.color(color.new(#000000, 96), "Bear (black)",      group = skullGroup)
+skullMidCol   = input.color(color.new(#888888, 70), "Mid line (dotted)", group = skullGroup)
+extendZonesBy = 15
+extendZonesDynamic = true
+extendLastFVGs = true
+changeCombinedFVGsColor = false
+combinedText = true
+combinedColor = color.new(#fff700, 50)
+startZoneFrom = input.string("Last Bar", "Start Zones From", options = ["First Bar", "Last Bar"], group = "Style")
+volumeBarsLeftSide = true
+mirrorVolumeBars = true
+
+fvgSensitivity = fvgSensitivityText == "Extreme" ? 6.0 : fvgSensitivityText == "High" ? 2.0 : fvgSensitivityText == "Normal" ? 1.5 : 1.0
+
+// ═══════════════════════════════════════════════
+// MARKET STRUCTURE (MSS / BOS) — NEW IN v2.0
+// ═══════════════════════════════════════════════
+gMS = "⊹ Market Structure (MSS / BOS)"
+shwMS  = input.bool(true, "Show Market Structure",              group = gMS, tooltip = "Market structure is always measured on the CHART timeframe, independently of the Fix / Multi-Fix FVG timeframes.")
+msLen  = input.int (5,    "Pivot length (swing detection)",     group = gMS, minval = 3, maxval = 20, tooltip = "Higher = only bigger swings count as structure, so fewer but more significant MSS / BOS events.")
+iMSS   = input.bool(true, "Show MSS (Market Structure Shift)",  group = gMS)
+iBOS   = input.bool(true, "Show BOS (Break of Structure)",      group = gMS, tooltip = "BOS alerts require this to be ON — the BOS detection itself is gated by this toggle.")
+maxMSLines     = input.int (50,   "Max BOS lines to keep",      group = gMS, minval = 10, maxval = 300)
+msClearOnShift = input.bool(false,"Clear previous structure lines on each new MSS", group = gMS, tooltip = "OFF (default) = keep the full structure history on the chart. ON = wipe the old MSS/BOS drawings every time structure flips, so only the current leg is shown.")
+
+gMSSbl = "⊹ MSS Bullish"
+cMSSbl         = input.color (color.new(#00e6a1, 0),  "Line color",  group = gMSSbl, inline = 'mssbl1')
+mssBlLineWidth = input.int   (2,                      "Width",       group = gMSSbl, inline = 'mssbl1', minval = 1, maxval = 5)
+mssBlLineStyle = input.string('Solid',                "Style",       group = gMSSbl, options = ['Solid','Dashed','Dotted'])
+showMssBlLab   = input.bool  (true,                   "Show label",  group = gMSSbl)
+mssBlLabText   = input.string('MSS',                  "Label text",  group = gMSSbl)
+mssBlLabSize   = input.string('normal',               "Label size",  group = gMSSbl, options = ['tiny','small','normal','large','huge'])
+mssBlLabStyle  = input.string('Label Down',           "Label style", group = gMSSbl, options = ['Label Right','Label Left','Label Up','Label Down','Label Center','None'])
+mssBlLabTxt    = input.color (color.new(#00e6a1, 0),  "Text color",  group = gMSSbl, inline = 'mssbl2')
+mssBlLabBg     = input.color (color.new(#000000, 100),"Background",  group = gMSSbl, inline = 'mssbl2')
+
+gMSSbr = "⊹ MSS Bearish"
+cMSSbr         = input.color (color.new(#e60400, 0),  "Line color",  group = gMSSbr, inline = 'mssbr1')
+mssBrLineWidth = input.int   (2,                      "Width",       group = gMSSbr, inline = 'mssbr1', minval = 1, maxval = 5)
+mssBrLineStyle = input.string('Solid',                "Style",       group = gMSSbr, options = ['Solid','Dashed','Dotted'])
+showMssBrLab   = input.bool  (true,                   "Show label",  group = gMSSbr)
+mssBrLabText   = input.string('MSS',                  "Label text",  group = gMSSbr)
+mssBrLabSize   = input.string('normal',               "Label size",  group = gMSSbr, options = ['tiny','small','normal','large','huge'])
+mssBrLabStyle  = input.string('Label Up',             "Label style", group = gMSSbr, options = ['Label Right','Label Left','Label Up','Label Down','Label Center','None'])
+mssBrLabTxt    = input.color (color.new(#e60400, 0),  "Text color",  group = gMSSbr, inline = 'mssbr2')
+mssBrLabBg     = input.color (color.new(#000000, 100),"Background",  group = gMSSbr, inline = 'mssbr2')
+
+gBOSbl = "⊹ BOS Bullish"
+cBOSbl         = input.color (color.new(#00e6a1, 0),  "Line color",  group = gBOSbl, inline = 'bosbl1')
+bosBlLineWidth = input.int   (2,                      "Width",       group = gBOSbl, inline = 'bosbl1', minval = 1, maxval = 5)
+bosBlLineStyle = input.string('Dotted',               "Style",       group = gBOSbl, options = ['Solid','Dashed','Dotted'])
+showBosBlLab   = input.bool  (true,                   "Show label",  group = gBOSbl)
+bosBlLabText   = input.string('BOS',                  "Label text",  group = gBOSbl)
+bosBlLabSize   = input.string('normal',               "Label size",  group = gBOSbl, options = ['tiny','small','normal','large','huge'])
+bosBlLabStyle  = input.string('Label Down',           "Label style", group = gBOSbl, options = ['Label Right','Label Left','Label Up','Label Down','Label Center','None'])
+bosBlLabTxt    = input.color (color.lime,             "Text color",  group = gBOSbl, inline = 'bosbl2')
+bosBlLabBg     = input.color (color.new(#000000, 100),"Background",  group = gBOSbl, inline = 'bosbl2')
+
+gBOSbr = "⊹ BOS Bearish"
+cBOSbr         = input.color (color.new(#e60400, 0),  "Line color",  group = gBOSbr, inline = 'bosbr1')
+bosBrLineWidth = input.int   (2,                      "Width",       group = gBOSbr, inline = 'bosbr1', minval = 1, maxval = 5)
+bosBrLineStyle = input.string('Dotted',               "Style",       group = gBOSbr, options = ['Solid','Dashed','Dotted'])
+showBosBrLab   = input.bool  (true,                   "Show label",  group = gBOSbr)
+bosBrLabText   = input.string('BOS',                  "Label text",  group = gBOSbr)
+bosBrLabSize   = input.string('normal',               "Label size",  group = gBOSbr, options = ['tiny','small','normal','large','huge'])
+bosBrLabStyle  = input.string('Label Up',             "Label style", group = gBOSbr, options = ['Label Right','Label Left','Label Up','Label Down','Label Center','None'])
+bosBrLabTxt    = input.color (color.red,              "Text color",  group = gBOSbr, inline = 'bosbr2')
+bosBrLabBg     = input.color (color.new(#000000, 100),"Background",  group = gBOSbr, inline = 'bosbr2')
+
+// ═══════════════════════════════════════════════
+// EQUAL HIGHS / LOWS — NEW IN v2.0
+// ═══════════════════════════════════════════════
+gEQ = "⊹ Equal Highs / Lows"
+shwEQ       = input.bool (true,  "Show Equal Highs / Lows",      group = gEQ)
+eqLen       = input.int  (5,     "Swing length (pivot detection)", group = gEQ, minval = 2, maxval = 20)
+eqTolerance = input.float(0.02,  "Equal level tolerance %",      group = gEQ, minval = 0.001, maxval = 0.5, step = 0.005, tooltip = "Two consecutive pivots within this % of each other are treated as equal. Raise it on volatile symbols, lower it for strict double tops / bottoms.")
+eqExtBars   = input.int  (10,    "Extend line bars to right",    group = gEQ, minval = 0, maxval = 500)
+maxEqLines  = input.int  (20,    "Max EQH/EQL drawings to keep", group = gEQ, minval = 2, maxval = 100)
+
+gEQH = "⊹ Equal Highs"
+eqhLineColor = input.color (color.new(#ff1744, 30),  "Line color",  group = gEQH, inline = 'eqh1')
+eqhLineWidth = input.int   (1,                       "Width",       group = gEQH, inline = 'eqh1', minval = 1, maxval = 5)
+eqhLineStyle = input.string('Dashed',                "Style",       group = gEQH, options = ['Solid','Dashed','Dotted'])
+showEqhLab   = input.bool  (true,                    "Show label",  group = gEQH)
+eqhLabText   = input.string('EQH',                   "Label text",  group = gEQH)
+eqhLabSize   = input.string('normal',                "Label size",  group = gEQH, options = ['tiny','small','normal','large','huge'])
+eqhLabStyle  = input.string('Label Down',            "Label style", group = gEQH, options = ['Label Right','Label Left','Label Up','Label Down','Label Center','None'])
+eqhLabTxt    = input.color (color.new(#ff1744, 0),   "Text color",  group = gEQH, inline = 'eqh2')
+eqhLabBg     = input.color (color.new(#000000, 100), "Background",  group = gEQH, inline = 'eqh2')
+
+gEQL = "⊹ Equal Lows"
+eqlLineColor = input.color (color.new(#c8e624, 30),  "Line color",  group = gEQL, inline = 'eql1')
+eqlLineWidth = input.int   (1,                       "Width",       group = gEQL, inline = 'eql1', minval = 1, maxval = 5)
+eqlLineStyle = input.string('Dashed',                "Style",       group = gEQL, options = ['Solid','Dashed','Dotted'])
+showEqlLab   = input.bool  (true,                    "Show label",  group = gEQL)
+eqlLabText   = input.string('EQL',                   "Label text",  group = gEQL)
+eqlLabSize   = input.string('normal',                "Label size",  group = gEQL, options = ['tiny','small','normal','large','huge'])
+eqlLabStyle  = input.string('Label Up',              "Label style", group = gEQL, options = ['Label Right','Label Left','Label Up','Label Down','Label Center','None'])
+eqlLabTxt    = input.color (color.new(#c8e624, 0),   "Text color",  group = gEQL, inline = 'eql2')
+eqlLabBg     = input.color (color.new(#000000, 100), "Background",  group = gEQL, inline = 'eql2')
+
+// ═══════════════════════════════════════════════
+// ALERTS — NEW IN v2.0
+// ═══════════════════════════════════════════════
+gALRT = "⊹ Alerts (Structure / EQH-EQL)"
+alertOnClose = input.bool  (true, "Fire on bar close only (recommended)", group = gALRT, tooltip = "ON = the alert only fires once the bar has CLOSED, so a break that gets un-done intrabar never alerts you (no repaint, no premature alert). OFF = fires the instant price trades through the level — faster, but the break can fail before the close.")
+alertMssBull = input.bool  (true, "Alert: Bullish MSS", group = gALRT)
+alertMssBear = input.bool  (true, "Alert: Bearish MSS", group = gALRT)
+alertBosBull = input.bool  (true, "Alert: Bullish BOS", group = gALRT)
+alertBosBear = input.bool  (true, "Alert: Bearish BOS", group = gALRT)
+alertEqh     = input.bool  (false,"Alert: Equal Highs (EQH)", group = gALRT)
+alertEql     = input.bool  (false,"Alert: Equal Lows (EQL)",  group = gALRT)
+alertPrefix  = input.string('',   "Message prefix (optional)", group = gALRT, tooltip = "Prepended to every alert() message — handy for routing to a webhook or bot.")
+
+// ═══════════════════════════════════════════════
+// SHARED HELPERS (used by structure + EQH/EQL)
+// ═══════════════════════════════════════════════
+n = bar_index
+
+sizeOf(s) =>
+    switch s
+        'tiny'   => size.tiny
+        'small'  => size.small
+        'normal' => size.normal
+        'large'  => size.large
+        'huge'   => size.huge
+        =>          size.small
+
+lineStyleOf(s) =>
+    switch s
+        'Solid'  => line.style_solid
+        'Dashed' => line.style_dashed
+        'Dotted' => line.style_dotted
+        =>          line.style_solid
+
+labStyleOf(s, isUp) =>
+    switch s
+        'Label Right'  => label.style_label_right
+        'Label Left'   => label.style_label_left
+        'Label Up'     => label.style_label_up
+        'Label Down'   => label.style_label_down
+        'Label Center' => label.style_label_center
+        'None'         => label.style_none
+        =>                isUp ? label.style_label_up : label.style_label_down
+
+// ═══════════════════════════════════════════════
+// UDT
+// ═══════════════════════════════════════════════
+type FVG
+    float max
+    float min
+    bool  isBull = false
+    int   t
+    float totalVolume
+    int   startTime
+    int   endTime
+    bool  extendInfinite = false
+    bool  combined = false
+    bool  disabled = false
+    bool  isRendered = false
+
+    float lowVolume
+    float highVolume
+    int   lastTouched
+
+    string tfLabel = ""
+    int    tfSeconds = 0
+
+    box   fvgBox
+    box   fvgBoxText
+    box   fvgBoxPositive
+    box   fvgBoxNegative
+
+    line  fvgSeperator
+    line  fvgTextSeperator
+
+// zig-zag swing store for market structure
+type ZZ
+    array<int>   d
+    array<int>   x
+    array<float> y
+
+// market-structure drawing state
+type MSState
+    int          dir
+    array<line>  l_mssBl
+    array<line>  l_mssBr
+    array<line>  l_bosBl
+    array<line>  l_bosBr
+    array<label> lbMssBl
+    array<label> lbMssBr
+    array<label> lbBosBl
+    array<label> lbBosBr
+
+// ═══════════════════════════════════════════════
+// FVG HELPERS — unchanged
+// ═══════════════════════════════════════════════
+createFVG(float h, float l, bool bull, int t, float tv) =>
+    FVG newFVG = FVG.new(h, l, bull, t, tv)
+    newFVG
+
+safeDeleteFVG(FVG fvg) =>
+    fvg.isRendered := false
+    box.delete(fvg.fvgBox)
+    box.delete(fvg.fvgBoxText)
+    box.delete(fvg.fvgBoxPositive)
+    box.delete(fvg.fvgBoxNegative)
+    line.delete(fvg.fvgSeperator)
+    line.delete(fvg.fvgTextSeperator)
+
+moveLine(line _line, int _x, float _y, int _x2) =>
+    line.set_xy1(_line, _x,  _y)
+    line.set_xy2(_line, _x2, _y)
+
+moveBox(box _box, int _topLeftX, float _topLeftY, int _bottomRightX, float _bottomRightY) =>
+    box.set_lefttop(_box, _topLeftX, _topLeftY)
+    box.set_rightbottom(_box, _bottomRightX, _bottomRightY)
+
+colorWithTransparency(color colorF, float transparencyX) =>
+    color.new(colorF, color.t(colorF) * transparencyX)
+
+createFVGBox(color boxColor, float transparencyX = 1.0) =>
+    box.new(na, na, na, na, text_size = size.normal, xloc = xloc.bar_time, extend = extend.none, bgcolor = colorWithTransparency(boxColor, transparencyX), text_color = textColor, text_halign = text.align_center, border_color = #00000000)
+
+renderFVG(FVG fvg) =>
+    fvg.isRendered := true
+
+    // Zone width in MILLISECONDS (xloc.bar_time)
+    // = extendZonesBy bars × the duration of 1 bar on the source timeframe
+    int oneBarMs = (fvg.tfSeconds > 0 ? fvg.tfSeconds : timeframe.in_seconds(timeframe.period)) * 1000
+    int zoneSize = extendZonesBy * oneBarMs
+    if extendZonesDynamic and not na(fvg.endTime)
+        zoneSize := fvg.endTime - fvg.startTime
+    if na(fvg.endTime) and fvg.extendInfinite
+        zoneSize := time - fvg.startTime
+
+    int startX = volumeBarsLeftSide ? fvg.startTime : fvg.startTime + zoneSize - zoneSize / 3
+    int maxEndX = volumeBarsLeftSide ? fvg.startTime + zoneSize / 3 : fvg.startTime + zoneSize
+
+    // ─── SKULL MODE ───
+    if skullEnabled
+        // No main zone — only the mid line + grey/black volume bars
+        color skullCol = fvg.isBull ? skullBullCol : skullBearCol
+        fvg.fvgBoxPositive := createFVGBox(skullCol, 1.0)
+        fvg.fvgBoxNegative := createFVGBox(skullCol, 1.0)
+        fvg.fvgBoxText := createFVGBox(color.new(color.white, 100))
+        fvg.fvgSeperator := line.new(na, na, na, na, xloc.bar_time, extend.none, skullMidCol, line.style_dotted, 1)
+        fvg.fvgTextSeperator := line.new(na, na, na, na, xloc.bar_time, extend.none, color.new(color.white, 100), line.style_solid, 1)
+        // Invisible dummy main box (avoids na refs in safeDelete)
+        fvg.fvgBox := createFVGBox(color.new(color.white, 100), 1.0)
+
+        moveBox(fvg.fvgBoxText, volumeBarsLeftSide ? maxEndX : fvg.startTime, fvg.max, volumeBarsLeftSide ? fvg.startTime + zoneSize : startX, fvg.min)
+
+        if fvg.totalVolume != 0
+            int curEndXHigh = int(math.ceil((fvg.highVolume / fvg.totalVolume) * (maxEndX - startX) + startX))
+            int curEndXLow  = int(math.ceil((fvg.lowVolume  / fvg.totalVolume) * (maxEndX - startX) + startX))
+            moveBox(fvg.fvgBoxPositive, mirrorVolumeBars ? startX : curEndXLow, fvg.max, mirrorVolumeBars ? curEndXHigh : maxEndX, (fvg.min + fvg.max) / 2)
+            moveBox(fvg.fvgBoxNegative, mirrorVolumeBars ? startX : curEndXHigh, fvg.min, mirrorVolumeBars ? curEndXLow : maxEndX, (fvg.min + fvg.max) / 2)
+
+        // Dotted mid line across the full width
+        moveLine(fvg.fvgSeperator, fvg.startTime, (fvg.min + fvg.max) / 2, fvg.startTime + zoneSize)
+        // Text (discreet TF label)
+        if fvg.tfLabel != ""
+            box.set_text(fvg.fvgBoxText, fvg.tfLabel)
+            box.set_text_color(fvg.fvgBoxText, color.new(skullMidCol, 70))
+    else
+        // ─── NORMAL RENDERING (original) ───
+        fvg.fvgBox := createFVGBox((fvg.combined and changeCombinedFVGsColor) ? combinedColor : fvg.isBull ? bullColor : bearColor, 1.5)
+        fvg.fvgBoxPositive := createFVGBox(bullColor)
+        fvg.fvgBoxNegative := createFVGBox(bearColor)
+        fvg.fvgBoxText := createFVGBox(color.new(color.white, 100))
+        fvg.fvgSeperator := line.new(na, na, na, na, xloc.bar_time, extend.none, textColor, line.style_dashed, 1)
+        fvg.fvgTextSeperator := line.new(na, na, na, na, xloc.bar_time, extend.none, textColor, line.style_solid, 1)
+
+        moveBox(fvg.fvgBox, fvg.startTime, fvg.max, fvg.startTime + zoneSize, fvg.min)
+        moveBox(fvg.fvgBoxText, volumeBarsLeftSide ? maxEndX : fvg.startTime, fvg.max, volumeBarsLeftSide ? fvg.startTime + zoneSize : startX, fvg.min)
+
+        int percentage = nz(int((math.min(fvg.highVolume, fvg.lowVolume) / math.max(fvg.highVolume, fvg.lowVolume)) * 100.0))
+        string fvgText = fvg.totalVolume == 0 ? "FVG" : str.tostring(fvg.totalVolume, format.volume) + " (" + str.tostring(percentage) + "%)" + (combinedText and fvg.combined ? "\n[Combined]" : "")
+        if fvg.tfLabel != ""
+            fvgText := fvg.tfLabel + " · " + fvgText
+        box.set_text(fvg.fvgBoxText, fvgText)
+
+        if fvg.combined and not changeCombinedFVGsColor
+            fvg.fvgBox.set_bgcolor(colorWithTransparency(fvg.isBull ? bullColor : bearColor, 1.1))
+
+        if fvg.totalVolume != 0
+            int curEndXHigh = int(math.ceil((fvg.highVolume / fvg.totalVolume) * (maxEndX - startX) + startX))
+            int curEndXLow  = int(math.ceil((fvg.lowVolume  / fvg.totalVolume) * (maxEndX - startX) + startX))
+
+            moveBox(fvg.fvgBoxPositive, mirrorVolumeBars ? startX : curEndXLow, fvg.max, mirrorVolumeBars ? curEndXHigh : maxEndX, (fvg.min + fvg.max) / 2)
+            moveBox(fvg.fvgBoxNegative, mirrorVolumeBars ? startX : curEndXHigh, fvg.min, mirrorVolumeBars ? curEndXLow : maxEndX, (fvg.min + fvg.max) / 2)
+
+            moveLine(fvg.fvgSeperator, volumeBarsLeftSide ? startX : maxEndX, (fvg.min + fvg.max) / 2, volumeBarsLeftSide ? maxEndX : startX)
+
+            line.set_xy1(fvg.fvgTextSeperator, volumeBarsLeftSide ? maxEndX : startX, fvg.max)
+            line.set_xy2(fvg.fvgTextSeperator, volumeBarsLeftSide ? maxEndX : startX, fvg.min)
+
+areaOfFVG(FVG fvg) =>
+    int oneBarMs = (fvg.tfSeconds > 0 ? fvg.tfSeconds : timeframe.in_seconds(timeframe.period)) * 1000
+    int XA1 = fvg.startTime
+    int XA2 = na(fvg.endTime) ? fvg.startTime + extendZonesBy * oneBarMs : fvg.endTime
+    float YA1 = fvg.max
+    float YA2 = fvg.min
+    float edge1 = math.sqrt((XA2 - XA1) * (XA2 - XA1))
+    float edge2 = math.sqrt((YA2 - YA1) * (YA2 - YA1))
+    edge1 * edge2
+
+doFVGsTouch(FVG fvg1, FVG fvg2) =>
+    int oneBarMs1 = (fvg1.tfSeconds > 0 ? fvg1.tfSeconds : timeframe.in_seconds(timeframe.period)) * 1000
+    int oneBarMs2 = (fvg2.tfSeconds > 0 ? fvg2.tfSeconds : timeframe.in_seconds(timeframe.period)) * 1000
+    int XA1 = fvg1.startTime
+    int XA2 = na(fvg1.endTime) ? fvg1.startTime + extendZonesBy * oneBarMs1 : fvg1.endTime
+    float YA1 = fvg1.max
+    float YA2 = fvg1.min
+    int XB1 = fvg2.startTime
+    int XB2 = na(fvg2.endTime) ? fvg2.startTime + extendZonesBy * oneBarMs2 : fvg2.endTime
+    float YB1 = fvg2.max
+    float YB2 = fvg2.min
+    float intersectionArea = math.max(0, math.min(XA2, XB2) - math.max(XA1, XB1)) * math.max(0, math.min(YA1, YB1) - math.max(YA2, YB2))
+    float unionArea = areaOfFVG(fvg1) + areaOfFVG(fvg2) - intersectionArea
+    float overlapPercentage = (intersectionArea / unionArea) * 100.0
+    overlapPercentage > overlapThresholdPercentage
+
+isFVGValid(FVG fvg) =>
+    bool valid = true
+    if not showInvalidated and not na(fvg.endTime)
+        valid := false
+    else if fvg.disabled
+        valid := false
+    else if not na(fvg.endTime) and (fvg.endTime - fvg.startTime) < minimumFVGSize
+        valid := false
+    else if na(fvg.endTime) and deleteUntouched and (bar_index - fvg.lastTouched) > deleteUntouchedAfterXBars
+        valid := false
+    valid
+
+combineFVGsFunc(array<FVG> fvgList) =>
+    if fvgList.size() > 0
+        int lastCombinations = 999
+        while lastCombinations > 0
+            lastCombinations := 0
+            for i = 0 to fvgList.size() - 1
+                FVG curFVG1 = fvgList.get(i)
+                for j = 0 to fvgList.size() - 1
+                    FVG curFVG2 = fvgList.get(j)
+                    if i == j
+                        continue
+                    if not isFVGValid(curFVG1) or not isFVGValid(curFVG2)
+                        continue
+                    if curFVG1.isBull != curFVG2.isBull
+                        continue
+                    if doFVGsTouch(curFVG1, curFVG2)
+                        curFVG1.disabled := true
+                        curFVG2.disabled := true
+                        FVG newFVG = createFVG(math.max(curFVG1.max, curFVG2.max), math.min(curFVG1.min, curFVG2.min), curFVG1.isBull, math.min(curFVG1.t, curFVG2.t), 0)
+                        newFVG.startTime := math.min(curFVG1.startTime, curFVG2.startTime)
+                        int et = math.max(nz(curFVG1.endTime), nz(curFVG2.endTime))
+                        newFVG.endTime := et == 0 ? int(na) : et
+                        newFVG.totalVolume := curFVG1.totalVolume + curFVG2.totalVolume
+                        newFVG.lowVolume := curFVG1.lowVolume + curFVG2.lowVolume
+                        newFVG.highVolume := curFVG1.highVolume + curFVG2.highVolume
+                        newFVG.lastTouched := math.max(curFVG1.lastTouched, curFVG2.lastTouched)
+                        newFVG.tfLabel := curFVG1.tfLabel
+                        newFVG.tfSeconds := curFVG1.tfSeconds
+                        newFVG.combined := true
+                        fvgList.unshift(newFVG)
+                        lastCombinations += 1
+
+// ═══════════════════════════════════════════════
+// TF helpers
+// ═══════════════════════════════════════════════
+tfToLabel(string tf) =>
+    string r = tf
+    if tf == "1"
+        r := "M1"
+    else if tf == "5"
+        r := "M5"
+    else if tf == "15"
+        r := "M15"
+    else if tf == "30"
+        r := "M30"
+    else if tf == "60"
+        r := "H1"
+    else if tf == "120"
+        r := "H2"
+    else if tf == "240"
+        r := "H4"
+    else if tf == "D"
+        r := "D"
+    r
+
+tfToSeconds(string tf) =>
+    int r = 60
+    if tf == "1"
+        r := 60
+    else if tf == "5"
+        r := 300
+    else if tf == "15"
+        r := 900
+    else if tf == "30"
+        r := 1800
+    else if tf == "60"
+        r := 3600
+    else if tf == "120"
+        r := 7200
+    else if tf == "240"
+        r := 14400
+    else if tf == "D"
+        r := 86400
+    else
+        r := timeframe.in_seconds(tf == "" ? timeframe.period : tf)
+    r
+
+safeTF(string tf) => tf == "" ? timeframe.period : tf
+
+// ═══════════════════════════════════════════════
+// DETECTION FUNCTION (used by request.security)
+// Faithfully reproduces the original logic
+// Returns: [bullDetected, bearDetected, hi, lo, totalVol, highV, lowV, startT]
+// ═══════════════════════════════════════════════
+detectFVG() =>
+    bool volCheck = ta.cum(volume) > 0
+    float atr = ta.atr(atrLen)
+
+    float shortVol = ta.sma(volume, 5)
+    float longVol  = ta.sma(volume, 15)
+    float shortTerm = volCheck ? shortVol : 1.0
+    float longTerm  = volCheck ? longVol  : 0.0
+
+    float firstBarSize  = math.max(open, close) - math.min(open, close)
+    float secondBarSize = math.max(open[1], close[1]) - math.min(open[1], close[1])
+    float thirdBarSize  = math.max(open[2], close[2]) - math.min(open[2], close[2])
+    float barSizeSum = firstBarSize + secondBarSize + thirdBarSize
+
+    bool fvgBarsCheck = false
+    if fvgBars == "Same Type"
+        if (open > close and open[1] > close[1] and open[2] > close[2]) or (open <= close and open[1] <= close[1] and open[2] <= close[2])
+            fvgBarsCheck := true
+    else
+        fvgBarsCheck := true
+
+    float maxCODiff = math.max(math.abs(close[2] - open[1]), math.abs(close[1] - open))
+
+    bool bearCondition = false
+    bool bullCondition = false
+    if fvgBarsCheck
+        if fvgFilterMethod == "Average Range"
+            bearCondition := ((barSizeSum * fvgSensitivity > atr / 1.5) or not fvgSensEnabled) and (allowGaps or (maxCODiff <= atr))
+            bullCondition := bearCondition
+        else
+            float thresholdMultiplier = volumeThresholdPercent / 100.0
+            bearCondition := shortTerm > longTerm * thresholdMultiplier and (allowGaps or (maxCODiff <= atr))
+            bullCondition := bearCondition
+
+    bool bearFVG = high < low[2] and close[1] < low[2] and bearCondition
+    bool bullFVG = low > high[2] and close[1] > high[2] and bullCondition
+
+    float fvgHi = bearFVG ? low[2] : bullFVG ? low : float(na)
+    float fvgLo = bearFVG ? high   : bullFVG ? high[2] : float(na)
+    float fvgSize = bearFVG ? math.abs(low[2] - high) : bullFVG ? math.abs(low - high[2]) : 0.0
+
+    bool sizeEnough = (fvgSize * fvgSensitivity > atr) or not fvgSensEnabled
+    bool bullValid = bullFVG and sizeEnough
+    bool bearValid = bearFVG and sizeEnough
+
+    float volSum3 = math.sum(volume, 3)
+    float totalV = volCheck ? volSum3 : 0.0
+    float highV = bearValid ? (volCheck ? volume[2] : 0.0) : bullValid ? (volCheck ? (volume + volume[1]) : 0.0) : 0.0
+    float lowV  = bearValid ? (volCheck ? (volume + volume[1]) : 0.0) : bullValid ? (volCheck ? volume[2] : 0.0) : 0.0
+
+    int startT = startZoneFrom == "First Bar" ? time[2] : time
+
+    [bullValid, bearValid, fvgHi, fvgLo, totalV, highV, lowV, startT]
+
+// ═══════════════════════════════════════════════
+// PROCESS — detection + life cycle for 1 slot
+// ═══════════════════════════════════════════════
+processSlot(array<FVG> fvgList, bool bullDet, bool bearDet, float hi, float lo, float totalV, float highV, float lowV, int startT, string tfLabel, int tfSeconds, int lastDetectRef) =>
+    int newLastDetect = lastDetectRef
+    if bar_index > last_bar_index - maxDistanceToLastBar and barstate.isconfirmed
+        if (bullDet or bearDet) and not na(hi) and not na(lo) and startT != lastDetectRef
+            FVG newFVG = createFVG(hi, lo, bullDet, time, totalV)
+            newFVG.startTime := startT
+            newFVG.lastTouched := time
+            newFVG.highVolume := highV
+            newFVG.lowVolume := lowV
+            newFVG.tfLabel := tfLabel
+            newFVG.tfSeconds := tfSeconds
+            fvgList.unshift(newFVG)
+            while fvgList.size() > showLastXFVGs
+                FVG popped = fvgList.pop()
+                safeDeleteFVG(popped)
+            newLastDetect := startT
+
+        if fvgList.size() > 0
+            for i = 0 to fvgList.size() - 1
+                FVG curFVG = fvgList.get(i)
+                if na(curFVG.endTime)
+                    if (curFVG.isBull and low <= curFVG.max) or (not curFVG.isBull and high >= curFVG.min)
+                        curFVG.lastTouched := bar_index
+                    if curFVG.isBull and (fvgEndMethod == "Wick" ? low < curFVG.min : close < curFVG.min)
+                        curFVG.endTime := time
+                    if not curFVG.isBull and (fvgEndMethod == "Wick" ? high > curFVG.max : close > curFVG.max)
+                        curFVG.endTime := time
+
+        array<int> toRemove = array.new<int>(0)
+        if fvgList.size() > 0
+            for i = 0 to fvgList.size() - 1
+                int idx = fvgList.size() - 1 - i
+                FVG curFVG = fvgList.get(idx)
+                if not isFVGValid(curFVG)
+                    toRemove.push(idx)
+                    safeDeleteFVG(curFVG)
+        if toRemove.size() > 0
+            for i = 0 to toRemove.size() - 1
+                fvgList.remove(toRemove.get(i))
+    newLastDetect
+
+renderSlot(array<FVG> fvgList) =>
+    if fvgList.size() > 0
+        if combineFVGs
+            combineFVGsFunc(fvgList)
+        int extendedLastXFVGsCount = 0
+        for i = fvgList.size() - 1 to 0
+            FVG curFVG = fvgList.get(i)
+            if not isFVGValid(curFVG)
+                continue
+            if extendLastFVGs and na(curFVG.endTime) and extendedLastXFVGsCount < extendLastXFVGsCount
+                extendedLastXFVGsCount += 1
+                curFVG.extendInfinite := true
+            if curFVG.isRendered
+                safeDeleteFVG(curFVG)
+            renderFVG(curFVG)
+
+// ═══════════════════════════════════════════════
+// TF RESOLUTION
+// ═══════════════════════════════════════════════
+string activeTFC = tfMode == "Auto" ? timeframe.period : tfMode == "Fix" ? fixTF : (includeCurrent ? timeframe.period : "")
+string activeTF1 = tfMode == "Multi-Fix" ? mtf1 : ""
+string activeTF2 = tfMode == "Multi-Fix" ? mtf2 : ""
+string activeTF3 = tfMode == "Multi-Fix" ? mtf3 : ""
+string activeTF4 = tfMode == "Multi-Fix" ? mtf4 : ""
+
+// ═══════════════════════════════════════════════
+// STORAGE
+// ═══════════════════════════════════════════════
+var array<FVG> fvgListC = array.new<FVG>()
+var array<FVG> fvgList1 = array.new<FVG>()
+var array<FVG> fvgList2 = array.new<FVG>()
+var array<FVG> fvgList3 = array.new<FVG>()
+var array<FVG> fvgList4 = array.new<FVG>()
+
+var int lastDetectC = 0
+var int lastDetect1 = 0
+var int lastDetect2 = 0
+var int lastDetect3 = 0
+var int lastDetect4 = 0
+
+// ═══════════════════════════════════════════════
+// REQUEST.SECURITY
+// ═══════════════════════════════════════════════
+[bullC, bearC, hiC, loC, tvC, hvC, lvC, stC] = request.security(syminfo.tickerid, safeTF(activeTFC), detectFVG(), lookahead = barmerge.lookahead_off)
+[bull1, bear1, hi1, lo1, tv1, hv1, lv1, st1] = request.security(syminfo.tickerid, safeTF(activeTF1), detectFVG(), lookahead = barmerge.lookahead_off)
+[bull2, bear2, hi2, lo2, tv2, hv2, lv2, st2] = request.security(syminfo.tickerid, safeTF(activeTF2), detectFVG(), lookahead = barmerge.lookahead_off)
+[bull3, bear3, hi3, lo3, tv3, hv3, lv3, st3] = request.security(syminfo.tickerid, safeTF(activeTF3), detectFVG(), lookahead = barmerge.lookahead_off)
+[bull4, bear4, hi4, lo4, tv4, hv4, lv4, st4] = request.security(syminfo.tickerid, safeTF(activeTF4), detectFVG(), lookahead = barmerge.lookahead_off)
+
+// ═══════════════════════════════════════════════
+// PROCESSING
+// ═══════════════════════════════════════════════
+if activeTFC != ""
+    lastDetectC := processSlot(fvgListC, bullC, bearC, hiC, loC, tvC, hvC, lvC, stC, tfMode == "Auto" ? "" : tfToLabel(activeTFC), tfToSeconds(activeTFC), lastDetectC)
+if activeTF1 != ""
+    lastDetect1 := processSlot(fvgList1, bull1, bear1, hi1, lo1, tv1, hv1, lv1, st1, tfToLabel(activeTF1), tfToSeconds(activeTF1), lastDetect1)
+if activeTF2 != ""
+    lastDetect2 := processSlot(fvgList2, bull2, bear2, hi2, lo2, tv2, hv2, lv2, st2, tfToLabel(activeTF2), tfToSeconds(activeTF2), lastDetect2)
+if activeTF3 != ""
+    lastDetect3 := processSlot(fvgList3, bull3, bear3, hi3, lo3, tv3, hv3, lv3, st3, tfToLabel(activeTF3), tfToSeconds(activeTF3), lastDetect3)
+if activeTF4 != ""
+    lastDetect4 := processSlot(fvgList4, bull4, bear4, hi4, lo4, tv4, hv4, lv4, st4, tfToLabel(activeTF4), tfToSeconds(activeTF4), lastDetect4)
+
+// ═══════════════════════════════════════════════
+// RENDER
+// ═══════════════════════════════════════════════
+if barstate.islast
+    if activeTFC != ""
+        renderSlot(fvgListC)
+    if activeTF1 != ""
+        renderSlot(fvgList1)
+    if activeTF2 != ""
+        renderSlot(fvgList2)
+    if activeTF3 != ""
+        renderSlot(fvgList3)
+    if activeTF4 != ""
+        renderSlot(fvgList4)
+
+// ═══════════════════════════════════════════════
+// MARKET STRUCTURE (MSS / BOS) — STATE  — NEW IN v2.0
+// ═══════════════════════════════════════════════
+var ZZ aZZ = ZZ.new(array.new<int>(50, 0), array.new<int>(50, 0), array.new<float>(50, na))
+
+var MSState msState = MSState.new(0,
+     array.new<line>(),  array.new<line>(),  array.new<line>(),  array.new<line>(),
+     array.new<label>(), array.new<label>(), array.new<label>(), array.new<label>())
+
+zz_in_out(int d, int x2, float y2) =>
+    aZZ.d.unshift(d)
+    aZZ.x.unshift(x2)
+    aZZ.y.unshift(y2)
+    aZZ.d.pop()
+    aZZ.x.pop()
+    aZZ.y.pop()
+
+clear_lines_arr(array<line> a) =>
+    while a.size() > 0
+        a.pop().delete()
+
+clear_labels_arr(array<label> a) =>
+    while a.size() > 0
+        a.pop().delete()
+
+mk_ms_line(int idx, color col, string sty, int wid) =>
+    line.new(aZZ.x.get(idx), aZZ.y.get(idx), n, aZZ.y.get(idx), color = col, style = lineStyleOf(sty), width = wid)
+
+mk_ms_label(int idx, string txt, string sizeStr, string styleStr, bool isUp, color txCol, color bgCol) =>
+    label.new(int(math.round(math.avg(aZZ.x.get(idx), n))), aZZ.y.get(idx)
+         , text      = txt
+         , style     = labStyleOf(styleStr, isUp)
+         , color     = bgCol
+         , textcolor = txCol
+         , size      = sizeOf(sizeStr))
+
+// --- per-bar alert signal flags (set inside the block below) ---
+bool  sigMssBull = false
+bool  sigMssBear = false
+bool  sigBosBull = false
+bool  sigBosBear = false
+float sigLevel   = na
+
+// ═══════════════════════════════════════════════
+// MARKET STRUCTURE (MSS / BOS) — CALCULATIONS
+// ═══════════════════════════════════════════════
+if shwMS
+    ph_ms = ta.pivothigh(high, msLen, 1)
+    pl_ms = ta.pivotlow (low,  msLen, 1)
+    x2_ms = n - 1
+
+    if not na(ph_ms)
+        dir_z = aZZ.d.get(0)
+        y2_z  = nz(high[1])
+        if dir_z < 1
+            zz_in_out(1, x2_ms, y2_z)
+        else
+            if dir_z == 1 and ph_ms > aZZ.y.get(0)
+                aZZ.x.set(0, x2_ms)
+                aZZ.y.set(0, y2_z)
+
+    if not na(pl_ms)
+        dir_z = aZZ.d.get(0)
+        y2_z  = nz(low[1])
+        if dir_z > -1
+            zz_in_out(-1, x2_ms, y2_z)
+        else
+            if dir_z == -1 and pl_ms < aZZ.y.get(0)
+                aZZ.x.set(0, x2_ms)
+                aZZ.y.set(0, y2_z)
+
+    iH = aZZ.d.get(2) ==  1 ? 2 : 1
+    iL = aZZ.d.get(2) == -1 ? 2 : 1
+
+    if close > aZZ.y.get(iH) and aZZ.d.get(iH) ==  1 and msState.dir <  1
+        msState.dir := 1
+        sigMssBull  := true
+        sigLevel    := aZZ.y.get(iH)
+        if msClearOnShift
+            clear_lines_arr (msState.l_bosBl)
+            clear_lines_arr (msState.l_bosBr)
+            clear_labels_arr(msState.lbBosBl)
+            clear_labels_arr(msState.lbBosBr)
+            clear_lines_arr (msState.l_mssBl)
+            clear_lines_arr (msState.l_mssBr)
+            clear_labels_arr(msState.lbMssBl)
+            clear_labels_arr(msState.lbMssBr)
+        if iMSS
+            msState.l_mssBl.unshift(mk_ms_line(iH, cMSSbl, mssBlLineStyle, mssBlLineWidth))
+            if showMssBlLab
+                msState.lbMssBl.unshift(mk_ms_label(iH, mssBlLabText, mssBlLabSize, mssBlLabStyle, false, mssBlLabTxt, mssBlLabBg))
+    else if close < aZZ.y.get(iL) and aZZ.d.get(iL) == -1 and msState.dir > -1
+        msState.dir := -1
+        sigMssBear  := true
+        sigLevel    := aZZ.y.get(iL)
+        if msClearOnShift
+            clear_lines_arr (msState.l_bosBl)
+            clear_lines_arr (msState.l_bosBr)
+            clear_labels_arr(msState.lbBosBl)
+            clear_labels_arr(msState.lbBosBr)
+            clear_lines_arr (msState.l_mssBl)
+            clear_lines_arr (msState.l_mssBr)
+            clear_labels_arr(msState.lbMssBl)
+            clear_labels_arr(msState.lbMssBr)
+        if iMSS
+            msState.l_mssBr.unshift(mk_ms_line(iL, cMSSbr, mssBrLineStyle, mssBrLineWidth))
+            if showMssBrLab
+                msState.lbMssBr.unshift(mk_ms_label(iL, mssBrLabText, mssBrLabSize, mssBrLabStyle, true, mssBrLabTxt, mssBrLabBg))
+    else if msState.dir ==  1 and close > aZZ.y.get(iH) and iBOS
+        addBos = true
+        if msState.l_bosBl.size() > 0
+            if aZZ.y.get(iH) == msState.l_bosBl.get(0).get_y2()
+                addBos := false
+        if msState.l_mssBl.size() > 0
+            if aZZ.y.get(iH) == msState.l_mssBl.get(0).get_y2()
+                addBos := false
+        if addBos
+            sigBosBull := true
+            sigLevel   := aZZ.y.get(iH)
+            msState.l_bosBl.unshift(mk_ms_line(iH, cBOSbl, bosBlLineStyle, bosBlLineWidth))
+            if showBosBlLab
+                msState.lbBosBl.unshift(mk_ms_label(iH, bosBlLabText, bosBlLabSize, bosBlLabStyle, false, bosBlLabTxt, bosBlLabBg))
+    else if msState.dir == -1 and close < aZZ.y.get(iL) and iBOS
+        addBos = true
+        if msState.l_bosBr.size() > 0
+            if aZZ.y.get(iL) == msState.l_bosBr.get(0).get_y2()
+                addBos := false
+        if msState.l_mssBr.size() > 0
+            if aZZ.y.get(iL) == msState.l_mssBr.get(0).get_y2()
+                addBos := false
+        if addBos
+            sigBosBear := true
+            sigLevel   := aZZ.y.get(iL)
+            msState.l_bosBr.unshift(mk_ms_line(iL, cBOSbr, bosBrLineStyle, bosBrLineWidth))
+            if showBosBrLab
+                msState.lbBosBr.unshift(mk_ms_label(iL, bosBrLabText, bosBrLabSize, bosBrLabStyle, true, bosBrLabTxt, bosBrLabBg))
+
+if msState.l_bosBl.size() > maxMSLines
+    msState.l_bosBl.pop().delete()
+    if msState.lbBosBl.size() > 0
+        msState.lbBosBl.pop().delete()
+if msState.l_bosBr.size() > maxMSLines
+    msState.l_bosBr.pop().delete()
+    if msState.lbBosBr.size() > 0
+        msState.lbBosBr.pop().delete()
+
+// ═══════════════════════════════════════════════
+// EQUAL HIGHS / LOWS — CALCULATIONS  — NEW IN v2.0
+// ═══════════════════════════════════════════════
+var array<line>  eqLines  = array.new<line>()
+var array<label> eqLabels = array.new<label>()
+
+var float eqLastSwingHigh     = na
+var int   eqLastSwingHighBar  = na
+var float eqPriorSwingHigh    = na
+var int   eqPriorSwingHighBar = na
+var float eqLastSwingLow      = na
+var int   eqLastSwingLowBar   = na
+var float eqPriorSwingLow     = na
+var int   eqPriorSwingLowBar  = na
+
+bool  sigEqh   = false
+bool  sigEql   = false
+float sigEqLvl = na
+
+if shwEQ
+    eqPh = ta.pivothigh(high, eqLen, eqLen)
+    eqPl = ta.pivotlow (low,  eqLen, eqLen)
+
+    if not na(eqPh)
+        eqPriorSwingHigh    := eqLastSwingHigh
+        eqPriorSwingHighBar := eqLastSwingHighBar
+        eqLastSwingHigh     := eqPh
+        eqLastSwingHighBar  := n - eqLen
+
+    if not na(eqPl)
+        eqPriorSwingLow     := eqLastSwingLow
+        eqPriorSwingLowBar  := eqLastSwingLowBar
+        eqLastSwingLow      := eqPl
+        eqLastSwingLowBar   := n - eqLen
+
+    if not na(eqPh) and not na(eqPriorSwingHigh) and not na(eqPriorSwingHighBar)
+        tol = eqLastSwingHigh * eqTolerance / 100
+        if math.abs(eqLastSwingHigh - eqPriorSwingHigh) <= tol
+            eqLvl = math.avg(eqLastSwingHigh, eqPriorSwingHigh)
+            sigEqh   := true
+            sigEqLvl := eqLvl
+            ln = line.new(eqPriorSwingHighBar, eqLvl, n + eqExtBars, eqLvl
+                     , color = eqhLineColor
+                     , style = lineStyleOf(eqhLineStyle)
+                     , width = eqhLineWidth)
+            eqLines.unshift(ln)
+            if showEqhLab
+                lb = label.new(n - eqLen, eqLvl
+                         , text      = eqhLabText
+                         , yloc      = yloc.price
+                         , color     = eqhLabBg
+                         , textcolor = eqhLabTxt
+                         , style     = labStyleOf(eqhLabStyle, false)
+                         , size      = sizeOf(eqhLabSize))
+                eqLabels.unshift(lb)
+            if eqLines.size() > maxEqLines
+                eqLines.pop().delete()
+            if eqLabels.size() > maxEqLines
+                eqLabels.pop().delete()
+
+    if not na(eqPl) and not na(eqPriorSwingLow) and not na(eqPriorSwingLowBar)
+        tol = eqLastSwingLow * eqTolerance / 100
+        if math.abs(eqLastSwingLow - eqPriorSwingLow) <= tol
+            eqLvl = math.avg(eqLastSwingLow, eqPriorSwingLow)
+            sigEql   := true
+            sigEqLvl := eqLvl
+            ln = line.new(eqPriorSwingLowBar, eqLvl, n + eqExtBars, eqLvl
+                     , color = eqlLineColor
+                     , style = lineStyleOf(eqlLineStyle)
+                     , width = eqlLineWidth)
+            eqLines.unshift(ln)
+            if showEqlLab
+                lb = label.new(n - eqLen, eqLvl
+                         , text      = eqlLabText
+                         , yloc      = yloc.price
+                         , color     = eqlLabBg
+                         , textcolor = eqlLabTxt
+                         , style     = labStyleOf(eqlLabStyle, true)
+                         , size      = sizeOf(eqlLabSize))
+                eqLabels.unshift(lb)
+            if eqLines.size() > maxEqLines
+                eqLines.pop().delete()
+            if eqLabels.size() > maxEqLines
+                eqLabels.pop().delete()
+
+// ═══════════════════════════════════════════════
+// ALERTS
+// ═══════════════════════════════════════════════
+// --- FVG alerts (original) ---
+alertcondition(bullC or bearC, "New FVG (Auto/Fix)", "New FVG on {{ticker}}")
+alertcondition(bull1 or bear1, "New FVG TF#1", "New FVG TF#1 on {{ticker}}")
+alertcondition(bull2 or bear2, "New FVG TF#2", "New FVG TF#2 on {{ticker}}")
+alertcondition(bull3 or bear3, "New FVG TF#3", "New FVG TF#3 on {{ticker}}")
+alertcondition(bull4 or bear4, "New FVG TF#4", "New FVG TF#4 on {{ticker}}")
+
+// --- structure / EQH-EQL alerts (NEW IN v2.0) ---
+okBar = not alertOnClose or barstate.isconfirmed
+
+fireMssBull = sigMssBull and alertMssBull and okBar
+fireMssBear = sigMssBear and alertMssBear and okBar
+fireBosBull = sigBosBull and alertBosBull and okBar
+fireBosBear = sigBosBear and alertBosBear and okBar
+fireEqh     = sigEqh     and alertEqh     and okBar
+fireEql     = sigEql     and alertEql     and okBar
+fireAnyMss  = fireMssBull or fireMssBear
+fireAnyBos  = fireBosBull or fireBosBear
+
+alertcondition(fireMssBull,              title = 'MSS Bullish',      message = 'Bullish MSS — {{ticker}} {{interval}} @ {{close}}')
+alertcondition(fireMssBear,              title = 'MSS Bearish',      message = 'Bearish MSS — {{ticker}} {{interval}} @ {{close}}')
+alertcondition(fireBosBull,              title = 'BOS Bullish',      message = 'Bullish BOS — {{ticker}} {{interval}} @ {{close}}')
+alertcondition(fireBosBear,              title = 'BOS Bearish',      message = 'Bearish BOS — {{ticker}} {{interval}} @ {{close}}')
+alertcondition(fireAnyMss,               title = 'MSS (any)',        message = 'MSS — {{ticker}} {{interval}} @ {{close}}')
+alertcondition(fireAnyBos,               title = 'BOS (any)',        message = 'BOS — {{ticker}} {{interval}} @ {{close}}')
+alertcondition(fireAnyMss or fireAnyBos, title = 'MSS or BOS (any)', message = 'Structure event (MSS/BOS) — {{ticker}} {{interval}} @ {{close}}')
+alertcondition(fireEqh,                  title = 'Equal Highs (EQH)', message = 'Equal Highs — {{ticker}} {{interval}} @ {{close}}')
+alertcondition(fireEql,                  title = 'Equal Lows (EQL)',  message = 'Equal Lows — {{ticker}} {{interval}} @ {{close}}')
+
+// --- dynamic messages: create ONE alert using "Any alert() function call" ---
+pfx(string s) =>
+    alertPrefix == '' ? s : alertPrefix + ' ' + s
+
+msgOf(string kind, string dir, float lvl) =>
+    pfx(dir + ' ' + kind + ' | ' + syminfo.ticker + ' | ' + timeframe.period + ' | level ' + str.tostring(lvl, format.mintick) + ' | close ' + str.tostring(close, format.mintick))
+
+if fireMssBull
+    alert(msgOf('MSS', 'Bullish', sigLevel), alert.freq_once_per_bar)
+if fireMssBear
+    alert(msgOf('MSS', 'Bearish', sigLevel), alert.freq_once_per_bar)
+if fireBosBull
+    alert(msgOf('BOS', 'Bullish', sigLevel), alert.freq_once_per_bar)
+if fireBosBear
+    alert(msgOf('BOS', 'Bearish', sigLevel), alert.freq_once_per_bar)
+if fireEqh
+    alert(msgOf('EQH', 'Equal Highs', sigEqLvl), alert.freq_once_per_bar)
+if fireEql
+    alert(msgOf('EQL', 'Equal Lows', sigEqLvl), alert.freq_once_per_bar)
