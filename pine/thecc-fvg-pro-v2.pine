@@ -10,20 +10,20 @@
 //   - NEW alerts: MSS, BOS and EQH/EQL — as named alertcondition() entries AND as
 //     dynamic alert() messages carrying direction, ticker, timeframe and level.
 //   - Settings menu is now entirely in English.
-//   - FVG detection, volume bars, Skull Mode and multi-TF rendering are UNCHANGED.
+//   - The FVG engine values that used to be hardcoded are now inputs, in the new
+//     "Zone Engine" group (zones kept, combining + overlap threshold, minimum zone
+//     duration, untouched-zone cleanup, max bars processed, ATR length) and in
+//     "Style" (zone width, dynamic width, extend-latest, combined-zone color/text,
+//     volume bar side and mirroring). Every default equals the old hardcoded value,
+//     so an untouched v2.0 chart renders exactly as before.
+//   - FVG detection logic, volume bars, Skull Mode and multi-TF rendering are UNCHANGED.
 //
 // Note: MSS / BOS / EQH / EQL are computed on the CHART timeframe (the drawings are
 // anchored to chart bars). The Fix / Multi-Fix timeframe modes still apply to the FVGs.
 
 //@version=6
 const bool DEBUG = false
-const int  maxBoxesCount              = 500
-const int  showLastXFVGs              = 125
-const int  extendLastXFVGsCount       = 3
-const int  minimumFVGSize             = 3
-const float overlapThresholdPercentage = 0
-const int  maxDistanceToLastBar       = 10000
-const int  atrLen                     = 10
+const int  maxBoxesCount = 500   // must stay const: indicator() drawing limits below
 
 indicator(title = 'THECC Fair Value Gaps PRO', shorttitle = "THECC FVG PRO", overlay = true, max_boxes_count = maxBoxesCount, max_labels_count = maxBoxesCount, max_lines_count = maxBoxesCount, max_bars_back = 5000)
 
@@ -50,11 +50,19 @@ volumeThresholdPercent = input.int(50, "Volume Threshold %", group = "General Co
 fvgBars = input.string("Same Type", "FVG Detection", options = ["Same Type", "All"], tooltip = "Same Type -> All 3 bars same type. \n\nAll -> Bar types may vary.", group = "General Configuration")
 fvgSensEnabled = input.bool(true, "", inline = "sens", group = "General Configuration")
 fvgSensitivityText = input.string("Extreme", "Detection Sensitivity", options = ["Extreme", "High", "Normal", "Low"], inline = "sens", group = "General Configuration")
-combineFVGs = true
 allowGaps = input.bool(false, "Allow Gaps Between Bars", group = "General Configuration")
-deleteUntouched = true
-deleteUntouchedAfterXBars = 200
 showInvalidated = input.bool(true, "Show Historic Zones", group = "General Configuration")
+
+// ── Zone engine (were hardcoded before v2.0) ──
+gENG = "⊹ Zone Engine"
+showLastXFVGs              = input.int  (125,   "Zones kept per timeframe",        group = gENG, minval = 1, maxval = 500, tooltip = "How many FVGs are stored per timeframe slot before the oldest is dropped. Higher = more history on screen, heavier script. Remember every rendered zone costs boxes and lines out of TradingView's 500-per-type budget, which the market-structure drawings also draw from.")
+combineFVGs                = input.bool (true,  "Combine overlapping zones",       group = gENG, tooltip = "Merges same-direction zones that overlap into a single larger zone.")
+overlapThresholdPercentage = input.float(0,     "Overlap threshold %",             group = gENG, minval = 0, maxval = 100, step = 1, tooltip = "How much two same-direction zones must overlap, as a % of their combined area, before they are merged. 0 (default) = merge as soon as they touch at all.")
+minimumFVGSize             = input.int  (3,     "Minimum zone duration (ms)",      group = gENG, minval = 0, tooltip = "An invalidated zone whose life (end time minus start time) is shorter than this many MILLISECONDS is thrown away as noise. This is a timestamp difference, not a bar count — 3 simply means 'must have lasted a moment'.")
+deleteUntouched            = input.bool (true,  "Delete untouched zones",          group = gENG, inline = 'unt')
+deleteUntouchedAfterXBars  = input.int  (200,   "after X bars",                    group = gENG, inline = 'unt', minval = 1, maxval = 5000, tooltip = "Removes a zone price has not traded back into within this many bars.")
+maxDistanceToLastBar       = input.int  (10000, "Max bars back to process",        group = gENG, minval = 100, maxval = 20000, tooltip = "Bars older than this are skipped entirely by the detection loop. Lower it if the script times out on a long history.")
+atrLen                     = input.int  (10,    "ATR length (sensitivity filter)", group = gENG, minval = 1, maxval = 200, tooltip = "The ATR that feeds the Average Range filter and the zone-size check. Longer = smoother reference, so fewer zones are rejected on a single volatile bar.")
 
 bullColor = input.color(color.new(#089981, 50), "Bull Color", group = "Style", inline = "BBcolors")
 bearColor = input.color(color.new(#f23645, 50), "Bear Color", group = "Style", inline = "BBcolors")
@@ -66,15 +74,18 @@ skullEnabled  = input.bool(false, "Enable Skull Mode", group = skullGroup, toolt
 skullBullCol  = input.color(color.new(#cccccc, 96), "Bull (light grey)", group = skullGroup)
 skullBearCol  = input.color(color.new(#000000, 96), "Bear (black)",      group = skullGroup)
 skullMidCol   = input.color(color.new(#888888, 70), "Mid line (dotted)", group = skullGroup)
-extendZonesBy = 15
-extendZonesDynamic = true
-extendLastFVGs = true
-changeCombinedFVGsColor = false
-combinedText = true
-combinedColor = color.new(#fff700, 50)
 startZoneFrom = input.string("Last Bar", "Start Zones From", options = ["First Bar", "Last Bar"], group = "Style")
-volumeBarsLeftSide = true
-mirrorVolumeBars = true
+
+// ── Zone drawing (were hardcoded before v2.0) ──
+extendZonesBy           = input.int  (15,    "Extend zones by (bars)",              group = "Style", minval = 1, maxval = 500, tooltip = "Default zone width, counted in bars of the zone's OWN timeframe — so an H1 zone stays an H1-width zone on an M5 chart.")
+extendZonesDynamic      = input.bool (true,  "Dynamic width (stop at invalidation)", group = "Style", tooltip = "ON (default) = an invalidated zone is drawn from its start to the bar that invalidated it. OFF = every zone keeps the fixed width above.")
+extendLastFVGs          = input.bool (true,  "Extend latest zones to current bar",  group = "Style", inline = 'extl')
+extendLastXFVGsCount    = input.int  (3,     "count",                               group = "Style", inline = 'extl', minval = 1, maxval = 20, tooltip = "How many of the most recent still-valid zones per timeframe get stretched all the way to the current bar.")
+changeCombinedFVGsColor = input.bool (false, "Recolor combined zones",              group = "Style", inline = 'comb')
+combinedColor           = input.color(color.new(#fff700, 50), "",                    group = "Style", inline = 'comb')
+combinedText            = input.bool (true,  "Tag combined zones in the text",      group = "Style", tooltip = "Adds a [Combined] line to the volume text of a merged zone.")
+volumeBarsLeftSide      = input.bool (true,  "Volume bars on left side",            group = "Style", tooltip = "OFF moves the volume profile to the right of the zone and the text block to the left.")
+mirrorVolumeBars        = input.bool (true,  "Mirror volume bars",                  group = "Style", tooltip = "ON = both volume bars grow from the same edge. OFF = they grow toward each other from opposite ends.")
 
 fvgSensitivity = fvgSensitivityText == "Extreme" ? 6.0 : fvgSensitivityText == "High" ? 2.0 : fvgSensitivityText == "Normal" ? 1.5 : 1.0
 
