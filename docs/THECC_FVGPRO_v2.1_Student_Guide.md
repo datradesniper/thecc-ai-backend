@@ -852,15 +852,24 @@ Fair Value Gaps PRO records where participation was one-sided, where protective 
 
 | Document | Document ID | Purpose |
 |---|---|---|
-| Cheat Sheet | `THECC-DOC-FVGPRO-CS` | One-page on-chart legend and defaults |
 | Quick Start | `THECC-DOC-FVGPRO-QS` | Installation and first chart in ten minutes |
+| Cheat Sheet | `THECC-DOC-FVGPRO-CS` | One-page on-chart legend and defaults |
+| Knowledge Base | `THECC-DOC-FVGPRO-KB` | Every formula, default and limit — the figures this guide quotes |
+| FAQ Book | `THECC-DOC-FVGPRO-FAQ` | 70 questions across install, detection, alerts and expectations |
+| Troubleshooting Manual | `THECC-DOC-FVGPRO-TS` | Fault tables and the escalation capture list |
+| Student Workbook | `THECC-DOC-FVGPRO-WB` | Four-week logs, the sequence worksheet, readiness check |
+| Practical Exercises | `THECC-DOC-FVGPRO-PE` | 12 verifiable drills |
+| Live Trading Lab Manual | `THECC-DOC-FVGPRO-LM` | Supervised narration sessions |
+| Certification Exam | `THECC-DOC-FVGPRO-EX` | 40-mark assessment |
 | Instructor Guide | `THECC-DOC-FVGPRO-IG` | Teaching notes, timings, discussion prompts |
-| Answer Key | `THECC-DOC-FVGPRO-AK` | Certification quiz answers |
-| Workbook | `THECC-DOC-FVGPRO-WB` | Exercises and journalling templates |
-| Release Notes | `THECC-DOC-FVGPRO-RN` | What changed in v2.1 |
+| Answer Keys | `THECC-DOC-FVGPRO-AK` · `-EX-AK` | Quiz and exam answers (instructor copies) |
+| Developer Guide | `THECC-DOC-FVGPRO-DG` | Architecture, detection contract, extension risks |
+| Release Notes · Change Log | `THECC-DOC-FVGPRO-RN` · `-CL` | What changed in v2.1 and v2.0 |
+| Maintenance Checklist · Roadmap | `THECC-DOC-FVGPRO-MC` · `-RM` | Release process and proposed features |
+| Documentation Index | `THECC-DOC-FVGPRO-IX` | Suite status and publication sequence |
 | Academy Documentation Standard | `_ACADEMY_DOC_STANDARD_v1.0.md` | The standard governing this document |
 
-⚠️ Documents other than the Student Guide and Cheat Sheet are **not yet authored** for this product. The Academy suite is 20 documents per indicator; this release delivers 2.
+⚠️ 18 of the 20-document suite are authored. Video Scripts (`-VS`) and PowerPoint (`-PPT`) exist as outlines only, and DOCX and PDF renders are outstanding — see the Documentation Index.
 
 ---
 

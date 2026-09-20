@@ -1,4 +1,4 @@
-import markdown, re, sys, pathlib
+import markdown, re, pathlib
 
 CSS = """:root{--navy:#0A1428;--green:#05FF9B;--green2:#059f6b;--silver:#9AA3B2;--ink:#1a1f2b;--line:#dde3ec;}
 *{box-sizing:border-box}
@@ -25,6 +25,15 @@ hr{border:none;border-top:2px solid var(--line);margin:2em 0}
 def render(md_path, title, doc_id, version):
     src = pathlib.Path(md_path).read_text(encoding='utf-8')
     body = markdown.markdown(src, extensions=['tables', 'fenced_code', 'toc', 'sane_lists'])
+    # compact: collapse the one-tag-per-line output, keeping <pre> blocks intact
+    pres = []
+    def stash(m):
+        pres.append(m.group(0)); return f'@@PRE{len(pres)-1}@@'
+    body = re.sub(r'<pre>.*?</pre>', stash, body, flags=re.S)
+    body = re.sub(r'>\s*\n\s*<', '><', body)
+    body = re.sub(r'\n{2,}', '\n', body)
+    for i, blk in enumerate(pres):
+        body = body.replace(f'@@PRE{i}@@', blk)
     html = f"""<!doctype html><html lang='en'><head><meta charset='utf-8'>
 <meta name='viewport' content='width=device-width,initial-scale=1'>
 <title>{title}</title><style>
