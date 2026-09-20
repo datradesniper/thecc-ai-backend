@@ -869,7 +869,7 @@ Fair Value Gaps PRO records where participation was one-sided, where protective 
 | Documentation Index | `THECC-DOC-FVGPRO-IX` | Suite status and publication sequence |
 | Academy Documentation Standard | `_ACADEMY_DOC_STANDARD_v1.0.md` | The standard governing this document |
 
-⚠️ 18 of the 20-document suite are authored. Video Scripts (`-VS`) and PowerPoint (`-PPT`) exist as outlines only, and DOCX and PDF renders are outstanding — see the Documentation Index.
+⚠️ 18 of the 20-document suite are authored, and every one is available as a PDF. Video Scripts (`-VS`) and PowerPoint (`-PPT`) exist as outlines only, and DOCX renders are outstanding — see the Documentation Index.
 
 ---
 

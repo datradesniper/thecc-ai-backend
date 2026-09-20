@@ -47,5 +47,21 @@ def render(md_path, title, doc_id, version):
     pathlib.Path(out).write_text(html, encoding='utf-8')
     print('wrote', out, len(html), 'bytes')
 
-render('THECC_FVGPRO_v2.1_Student_Guide.md', 'THECC Fair Value Gaps PRO — Student Guide', 'THECC-DOC-FVGPRO-SG', 'v2.1.0')
-render('THECC_FVGPRO_v2.1_Cheat_Sheet.md',   'THECC Fair Value Gaps PRO — Cheat Sheet',   'THECC-DOC-FVGPRO-CS', 'v2.1.0')
+
+def title_and_id(src):
+    """Pull the document title from the first H1 and the ID from the control table."""
+    h1 = re.search(r'^# (.+)$', src, re.M)
+    did = re.search(r'\| Document ID \| ([A-Z0-9-]+) \|', src)
+    return (h1.group(1).strip() if h1 else 'THECC Academy Document',
+            did.group(1).strip() if did else '')
+
+
+def main():
+    for md in sorted(pathlib.Path(__file__).parent.glob('*.md')):
+        src = md.read_text(encoding='utf-8')
+        title, doc_id = title_and_id(src)
+        render(str(md), title, doc_id, 'v2.1.0')
+
+
+if __name__ == '__main__':
+    main()
