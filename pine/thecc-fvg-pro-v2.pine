@@ -18,8 +18,15 @@
 //     so an untouched v2.0 chart renders exactly as before.
 //   - FVG detection logic, volume bars, Skull Mode and multi-TF rendering are UNCHANGED.
 //
-// Note: MSS / BOS / EQH / EQL are computed on the CHART timeframe (the drawings are
-// anchored to chart bars). The Fix / Multi-Fix timeframe modes still apply to the FVGs.
+// v2.1 changes:
+//   - NEW Liquidity Sweeps: marks the bar that runs a recent high/low and then closes
+//     back inside it — a failed breakout / stop run. Ported from the SMC v1.7 script,
+//     with its own alerts and a cap on how many sweep labels are kept.
+//   - Educational tooltips on every settings group, matching the SMC script's style.
+//     A separate student guide lives in docs/THECC-FVG-PRO-student-guide.md.
+//
+// Note: MSS / BOS / EQH / EQL / liquidity sweeps are computed on the CHART timeframe
+// (their drawings anchor to chart bars). Fix / Multi-Fix still applies to the FVGs.
 
 //@version=6
 const bool DEBUG = false
@@ -31,27 +38,27 @@ indicator(title = 'THECC Fair Value Gaps PRO', shorttitle = "THECC FVG PRO", ove
 // TF MODE
 // ═══════════════════════════════════════════════
 tfModeGroup = "⊹ Timeframe Mode"
-tfMode = input.string("Auto", "Mode", options = ["Auto", "Fix", "Multi-Fix"], group = tfModeGroup, tooltip = "Auto: the chart's current timeframe\nFix: lock onto a single timeframe\nMulti-Fix: up to 4 timeframes at once")
-fixTF  = input.timeframe("15", "Fix TF", options = ["", "1", "5", "15", "30", "60", "120", "240", "D"], group = tfModeGroup)
+tfMode = input.string("Auto", "Mode", options = ["Auto", "Fix", "Multi-Fix"], group = tfModeGroup, tooltip = "Which timeframe the FVGs are detected on.\n\nAuto = the chart's own timeframe. The zones change every time you change chart timeframe.\n\nFix = lock detection to ONE timeframe. Drop to an M1 chart and you still see your M15 gaps, at their true M15 size. This is how you keep an execution chart without losing the higher-timeframe reference.\n\nMulti-Fix = up to 4 timeframes at once, each zone tagged with its timeframe (M5, M15, H1 …). Use it to see where a lower-timeframe gap sits inside a higher-timeframe one — an overlap of two or three timeframes is a far more significant level than a single M5 gap.\n\nCost: each active timeframe is its own request.security call and its own set of zones, so Multi-Fix with 4 timeframes draws up to 4x the boxes. Mind the drawing budget in the Zone Engine tooltip.")
+fixTF  = input.timeframe("15", "Fix TF", options = ["", "1", "5", "15", "30", "60", "120", "240", "D"], group = tfModeGroup, tooltip = "The single timeframe used when Mode = Fix. Ignored in Auto and Multi-Fix.\n\nRule of thumb: pick the timeframe you actually take your bias from, then execute on a lower chart. Detecting on a timeframe LOWER than your chart is possible but the zones will be thin and noisy.")
 
 mtfGroup = "⊹ Multi-Fix Timeframes"
-includeCurrent = input.bool(false, "Include the chart's current timeframe", group = mtfGroup)
+includeCurrent = input.bool(false, "Include the chart's current timeframe", group = mtfGroup, tooltip = "Multi-Fix only. ON adds the chart's own timeframe as a 5th source on top of TF #1-#4. Leave it OFF when you want only the higher-timeframe reference on screen and none of the local noise.")
 mtf1 = input.string("5",  "TF #1", options = ["", "1", "5", "15", "30", "60", "120", "240", "D"], group = mtfGroup)
 mtf2 = input.string("15", "TF #2", options = ["", "1", "5", "15", "30", "60", "120", "240", "D"], group = mtfGroup)
 mtf3 = input.string("60", "TF #3", options = ["", "1", "5", "15", "30", "60", "120", "240", "D"], group = mtfGroup)
-mtf4 = input.string("",   "TF #4", options = ["", "1", "5", "15", "30", "60", "120", "240", "D"], group = mtfGroup)
+mtf4 = input.string("",   "TF #4", options = ["", "1", "5", "15", "30", "60", "120", "240", "D"], group = mtfGroup, tooltip = "Set any slot to blank to switch it off. Three well-chosen timeframes (e.g. M5 / M15 / H1) read better than four crowded ones.")
 
 // ═══════════════════════════════════════════════
 // FVG INPUTS — unchanged behavior
 // ═══════════════════════════════════════════════
-fvgEndMethod = input.string("Close", "Zone Invalidation", options = ["Wick", "Close"], group = "General Configuration")
-fvgFilterMethod = input.string("Average Range", "Zone Filtering", options = ["Average Range", "Volume Threshold"], group = "General Configuration")
+fvgEndMethod = input.string("Close", "Zone Invalidation", options = ["Wick", "Close"], group = "General Configuration", tooltip = "When a zone is considered used up.\n\nClose (default) = the zone survives until a candle BODY closes fully through it. A wick that pokes through and gets rejected does NOT kill it — that wick is often the fill you were waiting for.\n\nWick = any high/low through the far side ends the zone. Stricter and faster, but it will retire levels that price later respects.\n\nBe consistent: your invalidation setting decides where your stop belongs. If you trade Close invalidation, your stop belongs beyond the body-close level, not one tick past the zone edge.")
+fvgFilterMethod = input.string("Average Range", "Zone Filtering", options = ["Average Range", "Volume Threshold"], group = "General Configuration", tooltip = "How a gap earns the right to be drawn.\n\nAverage Range (default) = the three bars must be big relative to ATR, i.e. real displacement rather than drift. This is a price-based filter and works on any symbol, including ones with no reliable volume feed (spot FX, some CFDs).\n\nVolume Threshold = recent volume (5-bar average) must exceed the longer 15-bar average by the percentage set below. Use it on futures and other centrally-cleared symbols where volume is honest.\n\nNeither filter is an opinion about direction. Both answer one question: did participants move price with intent here, or did it wander?")
 volumeThresholdPercent = input.int(50, "Volume Threshold %", group = "General Configuration", tooltip = "Only taken into calculation when filter method is Volume Threshold.", minval = 1, maxval = 200)
-fvgBars = input.string("Same Type", "FVG Detection", options = ["Same Type", "All"], tooltip = "Same Type -> All 3 bars same type. \n\nAll -> Bar types may vary.", group = "General Configuration")
+fvgBars = input.string("Same Type", "FVG Detection", options = ["Same Type", "All"], tooltip = "Same Type (default) = all three bars must be the same direction (three up bars or three down bars). One-way pressure, cleanest gaps, fewest of them.\n\nAll = the bar directions may vary, so you also catch gaps created by a mixed sequence.\n\nStart with Same Type. Switch to All only when you have checked on your own symbol that the extra zones are ones you would actually trade.", group = "General Configuration")
 fvgSensEnabled = input.bool(true, "", inline = "sens", group = "General Configuration")
-fvgSensitivityText = input.string("Extreme", "Detection Sensitivity", options = ["Extreme", "High", "Normal", "Low"], inline = "sens", group = "General Configuration")
-allowGaps = input.bool(false, "Allow Gaps Between Bars", group = "General Configuration")
-showInvalidated = input.bool(true, "Show Historic Zones", group = "General Configuration")
+fvgSensitivityText = input.string("Extreme", "Detection Sensitivity", options = ["Extreme", "High", "Normal", "Low"], inline = "sens", group = "General Configuration", tooltip = "The multiplier applied to the size checks. Read it as how FORGIVING the filter is, not how strict.\n\nExtreme = 6.0 (most permissive, most zones) · High = 2.0 · Normal = 1.5 · Low = 1.0 (most selective, only clearly oversized gaps).\n\nThe gap must satisfy: gap size x sensitivity > ATR. So a LOW setting demands a genuinely large gap; Extreme lets small ones through.\n\nThe checkbox disables both size checks entirely — every geometric gap is then drawn. Useful for study, too noisy for execution.\n\nSet this per symbol and per timeframe, once, then leave it alone. Changing sensitivity mid-session to make a level appear is bias, not analysis.")
+allowGaps = input.bool(false, "Allow Gaps Between Bars", group = "General Configuration", tooltip = "OFF (default) = the sequence is rejected when the bar-to-bar open/close jump is larger than ATR, which filters out session gaps and news holes that only look like displacement.\n\nON = those jumps are accepted as valid gaps. Turn it ON only if you deliberately trade overnight and weekend gaps.")
+showInvalidated = input.bool(true, "Show Historic Zones", group = "General Configuration", tooltip = "ON (default) = zones stay on the chart after they are invalidated, drawn from their start to the bar that consumed them. That history is how you audit the tool: it shows you what actually happened at the levels you did not take.\n\nOFF = only live, unfilled zones are shown. Cleaner for execution, and it frees drawing objects.")
 
 // ── Zone engine (were hardcoded before v2.0) ──
 gENG = "⊹ Zone Engine"
@@ -64,7 +71,7 @@ deleteUntouchedAfterXBars  = input.int  (200,   "after X bars",                 
 maxDistanceToLastBar       = input.int  (10000, "Max bars back to process",        group = gENG, minval = 100, maxval = 20000, tooltip = "Bars older than this are skipped entirely by the detection loop. Lower it if the script times out on a long history.")
 atrLen                     = input.int  (10,    "ATR length (sensitivity filter)", group = gENG, minval = 1, maxval = 200, tooltip = "The ATR that feeds the Average Range filter and the zone-size check. Longer = smoother reference, so fewer zones are rejected on a single volatile bar.")
 
-bullColor = input.color(color.new(#089981, 50), "Bull Color", group = "Style", inline = "BBcolors")
+bullColor = input.color(color.new(#089981, 50), "Bull Color", group = "Style", inline = "BBcolors", tooltip = "Zone fill colors and the color of the volume bars inside each zone. The transparency you set here is scaled for the zone body (fainter) and used as-is for the volume bars, so pick a color you can still read at low opacity.")
 bearColor = input.color(color.new(#f23645, 50), "Bear Color", group = "Style", inline = "BBcolors")
 textColor = input.color(color.new(#ffffff, 50), "Text Color", group = "Style", inline = "BBcolors")
 
@@ -74,7 +81,7 @@ skullEnabled  = input.bool(false, "Enable Skull Mode", group = skullGroup, toolt
 skullBullCol  = input.color(color.new(#cccccc, 96), "Bull (light grey)", group = skullGroup)
 skullBearCol  = input.color(color.new(#000000, 96), "Bear (black)",      group = skullGroup)
 skullMidCol   = input.color(color.new(#888888, 70), "Mid line (dotted)", group = skullGroup)
-startZoneFrom = input.string("Last Bar", "Start Zones From", options = ["First Bar", "Last Bar"], group = "Style")
+startZoneFrom = input.string("Last Bar", "Start Zones From", options = ["First Bar", "Last Bar"], group = "Style", tooltip = "Where the left edge of the zone sits.\n\nLast Bar (default) = the third bar of the pattern, i.e. the bar on which the gap was confirmed. This is honest about when you could have known.\n\nFirst Bar = the first bar of the three, so the box covers the whole formation. Prettier for review, but it can create the impression you had the level earlier than you did.")
 
 // ── Zone drawing (were hardcoded before v2.0) ──
 extendZonesBy           = input.int  (15,    "Extend zones by (bars)",              group = "Style", minval = 1, maxval = 500, tooltip = "Default zone width, counted in bars of the zone's OWN timeframe — so an H1 zone stays an H1-width zone on an M5 chart.")
@@ -177,6 +184,30 @@ eqlLabTxt    = input.color (color.new(#c8e624, 0),   "Text color",  group = gEQL
 eqlLabBg     = input.color (color.new(#000000, 100), "Background",  group = gEQL, inline = 'eql2')
 
 // ═══════════════════════════════════════════════
+// LIQUIDITY SWEEPS — NEW IN v2.1
+// ═══════════════════════════════════════════════
+gLIQ = "⊹ Liquidity Sweeps"
+shwLiq       = input.bool(true, "Show Liquidity Sweeps",      group = gLIQ, tooltip = "Marks a bar that trades THROUGH a recent high or low and then closes back inside it, against the direction of the run.\n\nBuy-side sweep: price takes out the highest high of the lookback window, then closes back below that high on a down-closing bar. The buy stops resting above the old high were filled, and price did not hold there.\n\nSell-side sweep: the mirror image below the lowest low.\n\nWhy it matters: a sweep is a failed breakout. The orders it collected are the fuel for the move the other way, and the wick it leaves is exactly the kind of bar that creates a fresh FVG. The highest-quality sequence in this toolkit is sweep -> market structure shift -> retrace into the FVG the shift left behind.\n\nWhat it is not: a signal on its own. A sweep against a strong trend is routinely just a pause. Trade it with structure and a level, or do not trade it.\n\nComputed on the CHART timeframe, like MSS/BOS and EQH/EQL.")
+liqLookback  = input.int (20,   "Liquidity lookback (bars)",  group = gLIQ, minval = 5, maxval = 200, tooltip = "How far back the high/low being swept is measured, excluding the current bar.\n\nSmall (10-20) = local sweeps, many signals, good on an execution chart. Large (50-200) = only runs on levels that have stood for a long time, far fewer signals, each one more significant.\n\nMatch this to the level you actually care about. If your plan is built on the session high, size the lookback so the window covers the session.")
+maxLiqLabels = input.int (50,   "Max sweep labels to keep",   group = gLIQ, minval = 1, maxval = 200, tooltip = "Sweep labels are capped so they cannot crowd out the MSS/BOS and EQH/EQL labels — TradingView allows 500 label objects in total for the whole indicator and deletes the oldest silently once you pass it. Raise this only if you are not using the structure labels.")
+
+gLIQbs = "⊹ Buy-side Sweep (above) label"
+showBuyLab    = input.bool  (true,                    "Show label",  group = gLIQbs, tooltip = "A buy-side sweep prints above the bar. It reads as a rejection of higher prices, so it is context for SHORTS — do not read the word 'buy' as a direction to take.")
+buyLabText    = input.string('$ sweep',               "Label text",  group = gLIQbs)
+buyLabSize    = input.string('normal',                "Size",        group = gLIQbs, options = ['tiny','small','normal','large','huge'])
+buyLabStyle   = input.string('Label Down',            "Label style", group = gLIQbs, options = ['Label Right','Label Left','Label Up','Label Down','Label Center','None'])
+buyLabTxt     = input.color (color.new(#ff1744, 0),   "Text color",  group = gLIQbs, inline = 'bs1')
+buyLabBg      = input.color (color.new(#000000, 100), "Background",  group = gLIQbs, inline = 'bs1')
+
+gLIQss = "⊹ Sell-side Sweep (below) label"
+showSellLab   = input.bool  (true,                    "Show label",  group = gLIQss, tooltip = "A sell-side sweep prints below the bar. It reads as a rejection of lower prices, so it is context for LONGS.")
+sellLabText   = input.string('$ sweep',               "Label text",  group = gLIQss)
+sellLabSize   = input.string('normal',                "Size",        group = gLIQss, options = ['tiny','small','normal','large','huge'])
+sellLabStyle  = input.string('Label Up',              "Label style", group = gLIQss, options = ['Label Right','Label Left','Label Up','Label Down','Label Center','None'])
+sellLabTxt    = input.color (color.new(#c8e624, 0),   "Text color",  group = gLIQss, inline = 'ss1')
+sellLabBg     = input.color (color.new(#000000, 100), "Background",  group = gLIQss, inline = 'ss1')
+
+// ═══════════════════════════════════════════════
 // ALERTS — NEW IN v2.0
 // ═══════════════════════════════════════════════
 gALRT = "⊹ Alerts (Structure / EQH-EQL)"
@@ -187,6 +218,8 @@ alertBosBull = input.bool  (true, "Alert: Bullish BOS", group = gALRT)
 alertBosBear = input.bool  (true, "Alert: Bearish BOS", group = gALRT)
 alertEqh     = input.bool  (false,"Alert: Equal Highs (EQH)", group = gALRT)
 alertEql     = input.bool  (false,"Alert: Equal Lows (EQL)",  group = gALRT)
+alertBuySwp  = input.bool  (false,"Alert: Buy-side liquidity sweep",  group = gALRT)
+alertSellSwp = input.bool  (false,"Alert: Sell-side liquidity sweep", group = gALRT)
 alertPrefix  = input.string('',   "Message prefix (optional)", group = gALRT, tooltip = "Prepended to every alert() message — handy for routing to a webhook or bot.")
 
 // ═══════════════════════════════════════════════
@@ -903,6 +936,49 @@ if shwEQ
                 eqLabels.pop().delete()
 
 // ═══════════════════════════════════════════════
+// LIQUIDITY SWEEPS — CALCULATIONS  — NEW IN v2.1
+// ═══════════════════════════════════════════════
+var array<label> liqLabels = array.new<label>()
+
+bool  sigBuySweep  = false
+bool  sigSellSweep = false
+float sigSweepLvl  = na
+
+if shwLiq
+    prevRecentHigh = ta.highest(high[1], liqLookback)
+    prevRecentLow  = ta.lowest (low[1],  liqLookback)
+
+    buySideSweep  = high > prevRecentHigh and close < prevRecentHigh and close < open
+    sellSideSweep = low  < prevRecentLow  and close > prevRecentLow  and close > open
+
+    if buySideSweep
+        sigBuySweep := true
+        sigSweepLvl := prevRecentHigh
+        if showBuyLab
+            liqLabels.unshift(label.new(n, high
+                 , text      = buyLabText
+                 , yloc      = yloc.abovebar
+                 , color     = buyLabBg
+                 , textcolor = buyLabTxt
+                 , style     = labStyleOf(buyLabStyle, false)
+                 , size      = sizeOf(buyLabSize)))
+
+    if sellSideSweep
+        sigSellSweep := true
+        sigSweepLvl  := prevRecentLow
+        if showSellLab
+            liqLabels.unshift(label.new(n, low
+                 , text      = sellLabText
+                 , yloc      = yloc.belowbar
+                 , color     = sellLabBg
+                 , textcolor = sellLabTxt
+                 , style     = labStyleOf(sellLabStyle, true)
+                 , size      = sizeOf(sellLabSize)))
+
+    while liqLabels.size() > maxLiqLabels
+        liqLabels.pop().delete()
+
+// ═══════════════════════════════════════════════
 // ALERTS
 // ═══════════════════════════════════════════════
 // --- FVG alerts (original) ---
@@ -921,6 +997,8 @@ fireBosBull = sigBosBull and alertBosBull and okBar
 fireBosBear = sigBosBear and alertBosBear and okBar
 fireEqh     = sigEqh     and alertEqh     and okBar
 fireEql     = sigEql     and alertEql     and okBar
+fireBuySwp  = sigBuySweep  and alertBuySwp  and okBar
+fireSellSwp = sigSellSweep and alertSellSwp and okBar
 fireAnyMss  = fireMssBull or fireMssBear
 fireAnyBos  = fireBosBull or fireBosBear
 
@@ -933,6 +1011,9 @@ alertcondition(fireAnyBos,               title = 'BOS (any)',        message = '
 alertcondition(fireAnyMss or fireAnyBos, title = 'MSS or BOS (any)', message = 'Structure event (MSS/BOS) — {{ticker}} {{interval}} @ {{close}}')
 alertcondition(fireEqh,                  title = 'Equal Highs (EQH)', message = 'Equal Highs — {{ticker}} {{interval}} @ {{close}}')
 alertcondition(fireEql,                  title = 'Equal Lows (EQL)',  message = 'Equal Lows — {{ticker}} {{interval}} @ {{close}}')
+alertcondition(fireBuySwp,               title = 'Buy-side liquidity sweep',  message = 'Buy-side liquidity sweep (high taken, closed back below) — {{ticker}} {{interval}} @ {{close}}')
+alertcondition(fireSellSwp,              title = 'Sell-side liquidity sweep', message = 'Sell-side liquidity sweep (low taken, closed back above) — {{ticker}} {{interval}} @ {{close}}')
+alertcondition(fireBuySwp or fireSellSwp, title = 'Liquidity sweep (any)',    message = 'Liquidity sweep — {{ticker}} {{interval}} @ {{close}}')
 
 // --- dynamic messages: create ONE alert using "Any alert() function call" ---
 pfx(string s) =>
@@ -953,3 +1034,7 @@ if fireEqh
     alert(msgOf('EQH', 'Equal Highs', sigEqLvl), alert.freq_once_per_bar)
 if fireEql
     alert(msgOf('EQL', 'Equal Lows', sigEqLvl), alert.freq_once_per_bar)
+if fireBuySwp
+    alert(msgOf('SWEEP', 'Buy-side', sigSweepLvl), alert.freq_once_per_bar)
+if fireSellSwp
+    alert(msgOf('SWEEP', 'Sell-side', sigSweepLvl), alert.freq_once_per_bar)
