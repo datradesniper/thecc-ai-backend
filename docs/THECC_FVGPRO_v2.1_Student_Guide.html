@@ -1,0 +1,1545 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'>
+<meta name='viewport' content='width=device-width,initial-scale=1'>
+<title>THECC Fair Value Gaps PRO — Student Guide</title><style>
+:root{--navy:#0A1428;--green:#05FF9B;--green2:#059f6b;--silver:#9AA3B2;--ink:#1a1f2b;--line:#dde3ec;}
+*{box-sizing:border-box}
+body{font-family:'Segoe UI',Arial,Helvetica,sans-serif;color:var(--ink);line-height:1.55;max-width:920px;margin:0 auto;padding:48px 40px;background:#fff}
+h1{color:var(--navy);border-bottom:4px solid var(--green2);padding-bottom:.3em;font-size:2em;margin-top:0}
+h2{color:var(--navy);border-bottom:1px solid var(--line);padding-bottom:.2em;margin-top:1.8em}
+h3{color:var(--green2);margin-top:1.4em}
+h4{color:var(--navy)}
+a{color:var(--green2)}
+table{border-collapse:collapse;width:100%;margin:1em 0;font-size:.95em}
+th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+th{background:var(--navy);color:#fff}
+tr:nth-child(even) td{background:#f6f8fb}
+code{background:#f2f4f8;padding:2px 5px;border-radius:4px;font-family:Consolas,monospace;font-size:.92em}
+pre{background:#0A1428;color:#d7f7ea;padding:14px 16px;border-radius:8px;overflow-x:auto;line-height:1.4}
+pre code{background:none;color:inherit;padding:0}
+blockquote{border-left:4px solid var(--green2);background:#f3fbf7;margin:1em 0;padding:.6em 1em;border-radius:0 6px 6px 0}
+hr{border:none;border-top:2px solid var(--line);margin:2em 0}
+.brandbar{background:var(--navy);color:#fff;padding:14px 20px;border-radius:8px;margin-bottom:24px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap}
+.brandbar b{color:var(--green)}
+.foot{margin-top:3em;padding-top:1em;border-top:1px solid var(--line);color:var(--silver);font-size:.85em}
+@media print{body{padding:0}.brandbar{-webkit-print-color-adjust:exact;print-color-adjust:exact}th{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+</style></head><body>
+<div class='brandbar'><span>THECC Institutional Trader Academy™</span><span><b>Consistency Creates Freedom.</b></span></div>
+<!-- ┌─────────────────────────────────────────────────────────────────────┐ -->
+<!-- │ THECC INSTITUTIONAL TRADER ACADEMY™ — STANDARD DOCUMENT FRONT-MATTER │ -->
+<!-- └─────────────────────────────────────────────────────────────────────┘ -->
+
+<h1 id="thecc-fair-value-gaps-pro-student-guide">THECC Fair Value Gaps PRO — Student Guide</h1>
+<h3 id="thecc-institutional-trader-academytm">THECC Institutional Trader Academy™</h3>
+<h4 id="course-metadata">📘 Course Metadata</h4>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Academy</strong></td>
+<td>THECC Institutional Trader Academy™</td>
+</tr>
+<tr>
+<td><strong>Course</strong></td>
+<td>Fair Value Gaps PRO</td>
+</tr>
+<tr>
+<td><strong>Module</strong></td>
+<td>1–4 (Core Curriculum)</td>
+</tr>
+<tr>
+<td><strong>Lesson</strong></td>
+<td>All</td>
+</tr>
+<tr>
+<td><strong>Difficulty</strong></td>
+<td>Beginner → Intermediate</td>
+</tr>
+<tr>
+<td><strong>Estimated Time</strong></td>
+<td>90 minutes</td>
+</tr>
+<tr>
+<td><strong>Prerequisites</strong></td>
+<td>None (Market Structure Basics recommended)</td>
+</tr>
+<tr>
+<td><strong>Indicator Version</strong></td>
+<td>v2.1</td>
+</tr>
+<tr>
+<td><strong>Document Version</strong></td>
+<td>v2.1.0</td>
+</tr>
+<tr>
+<td><strong>Last Updated</strong></td>
+<td>2026-09-20</td>
+</tr>
+<tr>
+<td><strong>Instructor</strong></td>
+<td>Dale Batise</td>
+</tr>
+<tr>
+<td><strong>Status</strong></td>
+<td>Content Complete — Certification Pending</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Document control:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Document ID</td>
+<td>THECC-DOC-FVGPRO-SG</td>
+</tr>
+<tr>
+<td>Document type</td>
+<td>Student Guide (Master Curriculum)</td>
+</tr>
+<tr>
+<td>Indicator</td>
+<td>THECC Fair Value Gaps PRO · <strong>Registry ID pending</strong></td>
+</tr>
+<tr>
+<td>Version</td>
+<td>v2.1.0</td>
+</tr>
+<tr>
+<td>Build</td>
+<td>2.1.0+2026-09-20</td>
+</tr>
+<tr>
+<td>Release date</td>
+<td>2026-09-20</td>
+</tr>
+<tr>
+<td>Compatible indicator versions</td>
+<td>FVG PRO v2.1.x</td>
+</tr>
+<tr>
+<td>Academy Doc Standard</td>
+<td>v1.0</td>
+</tr>
+<tr>
+<td>Edition</td>
+<td>Student / Pro · Status: Beta</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>TradingView · Pine Script v6</td>
+</tr>
+<tr>
+<td>Copyright</td>
+<td>© THE CONSISTENCY COLLECTIVE</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>⚠️ <strong>Registry action required before publication.</strong> This product does not yet hold a permanent <code>THECC-NNNN</code> ID. <code>THECC_INDICATOR_REGISTRY.json</code> carries an open note under <strong>THECC-0008 (FVG Return Filter)</strong>: <em>"FVGBPR_v1.7.pine sits in the same folder — unclear whether it is a separate product (FVG+BPR) or an ancestor. Resolve before retrofit; may warrant its own ID."</em> Once the owner assigns the ID, replace <strong>Registry ID pending</strong> above and in the Document Control block, and move this document into its <code>THECC-NNNN &lt;CODE&gt;</code> Academy folder.</p>
+</blockquote>
+<p>[ QR CODE PLACEHOLDER — links to the current version of this guide in the Member Portal ]</p>
+<p><strong>Consistency Creates Freedom.</strong></p>
+<hr />
+<h4 id="callout-legend">Callout legend</h4>
+<table>
+<thead>
+<tr>
+<th>Symbol</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>💡</td>
+<td>Tip</td>
+</tr>
+<tr>
+<td>⚠️</td>
+<td>Warning</td>
+</tr>
+<tr>
+<td>✅</td>
+<td>Do this</td>
+</tr>
+<tr>
+<td>📸</td>
+<td>Screenshot</td>
+</tr>
+<tr>
+<td>📊</td>
+<td>Diagram</td>
+</tr>
+<tr>
+<td>📝</td>
+<td>Exercise</td>
+</tr>
+<tr>
+<td>❓</td>
+<td>Review Questions</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="table-of-contents">Table of Contents</h2>
+<ol>
+<li><a href="#chapter-1--welcome">Chapter 1 — Welcome</a></li>
+<li><a href="#chapter-2--installation">Chapter 2 — Installation</a></li>
+<li><a href="#chapter-3--indicator-walkthrough">Chapter 3 — Indicator Walkthrough</a></li>
+<li><a href="#chapter-4--timeframe-modes">Chapter 4 — Timeframe Modes</a></li>
+<li><a href="#chapter-5--reading-the-map">Chapter 5 — Reading the Map</a></li>
+<li><a href="#chapter-6--alerts">Chapter 6 — Alerts</a></li>
+<li><a href="#chapter-7--customization">Chapter 7 — Customization</a></li>
+<li><a href="#chapter-8--best-practices-top-20">Chapter 8 — Best Practices (Top 20)</a></li>
+<li><a href="#chapter-9--common-mistakes-top-25">Chapter 9 — Common Mistakes (Top 25)</a></li>
+<li><a href="#chapter-10--frequently-asked-questions-50">Chapter 10 — Frequently Asked Questions (50)</a></li>
+<li><a href="#chapter-11--troubleshooting">Chapter 11 — Troubleshooting</a></li>
+<li><a href="#chapter-12--quick-reference-printable-cheat-sheet">Chapter 12 — Quick Reference (Printable Cheat Sheet)</a></li>
+<li><a href="#appendix-a--certification-quiz">Appendix A — Certification Quiz</a></li>
+<li><a href="#appendix-b--glossary">Appendix B — Glossary</a></li>
+<li><a href="#course-summary">Course Summary</a></li>
+<li><a href="#document-control">Document Control</a></li>
+</ol>
+<hr />
+<h2 id="learning-objectives">Learning Objectives</h2>
+<p>By the end of this course you will be able to:</p>
+<ol>
+<li>Explain what a fair value gap represents in terms of participation and unfinished business.</li>
+<li>State the exact conditions this indicator requires before it draws a zone, and describe why each filter exists.</li>
+<li>Read every element on the chart — zone, volume split, percentage, midpoint, timeframe tag, combined tag, structure line, equal-level line and sweep label — without guessing.</li>
+<li>Choose between Auto, Fix and Multi-Fix timeframe modes for a defined trading style, and explain the cost of each.</li>
+<li>Distinguish a market structure shift from a break of structure, and state which one changes your bias.</li>
+<li>Identify the sweep → shift → gap sequence on a live chart and describe where the idea becomes invalid.</li>
+<li>Configure alerts for structure, equal levels and sweeps, and explain why bar-close gating protects you.</li>
+<li>Diagnose the four most common display faults, including the drawing budget, without external help.</li>
+</ol>
+<p><strong>Estimated completion time:</strong> 90 minutes · <strong>Difficulty:</strong> Beginner → Intermediate</p>
+<hr />
+<h1 id="chapter-1-welcome">Chapter 1 — Welcome</h1>
+<h2 id="what-fair-value-gaps-pro-is">What Fair Value Gaps PRO is</h2>
+<p>Fair Value Gaps PRO is a <strong>market map</strong>. It records four classes of evidence on your chart and keeps them there for as long as they remain valid:</p>
+<table>
+<thead>
+<tr>
+<th>Element</th>
+<th>Evidence it records</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Fair value gap zones</td>
+<td>Price ranges skipped by one-sided participation — unfinished business</td>
+</tr>
+<tr>
+<td>Market structure (MSS / BOS)</td>
+<td>Whether the market is continuing, or has just stopped continuing</td>
+</tr>
+<tr>
+<td>Equal highs / equal lows</td>
+<td>Flat shelves where protective orders accumulate</td>
+</tr>
+<tr>
+<td>Liquidity sweeps</td>
+<td>Levels where resting orders were taken and immediately rejected</td>
+</tr>
+</tbody>
+</table>
+<p>The indicator also measures the <strong>volume behind each gap</strong> and splits it across the zone, so a level arrives with its participation attached rather than as an anonymous rectangle.</p>
+<p>⚠️ <strong>This tool issues no buy or sell signals.</strong> It does not grade probability, it does not rank setups, and it holds no opinion about direction. It is context. Every decision — direction, entry, size, invalidation — remains yours, executed under your own plan.</p>
+<h2 id="why-it-exists">Why it exists</h2>
+<p>Most gap indicators draw every three-bar gap they find. The result is a chart covered in rectangles, most of which mark nothing more than a quiet drift between two bars.</p>
+<p>This indicator applies two tests before it accepts a gap:</p>
+<ol>
+<li><strong>The middle bar must close through the gap edge.</strong> Intent, not accident.</li>
+<li><strong>The move must be large relative to recent range, or backed by above-average volume.</strong> Displacement, not drift.</li>
+</ol>
+<p>What survives both tests is a smaller set of levels that were built by real participation. That selectivity is the product.</p>
+<h2 id="how-it-fits-inside-the-thecc-ecosystem">How it fits inside the THECC ecosystem</h2>
+<table>
+<thead>
+<tr>
+<th>Role</th>
+<th>Product</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Market map / context (this course)</td>
+<td>Fair Value Gaps PRO</td>
+</tr>
+<tr>
+<td>Market map / structural levels</td>
+<td>Support &amp; Resistance Matrix (THECC-0024)</td>
+</tr>
+<tr>
+<td>Execution and confirmed signals</td>
+<td>Precision Execution Engine (THECC-0002)</td>
+</tr>
+<tr>
+<td>Directional filter</td>
+<td>Medium Trend Strategy Suite (THECC-0004)</td>
+</tr>
+</tbody>
+</table>
+<p>A map tells you <strong>where</strong>. An execution tool tells you <strong>when</strong>. Keeping those two jobs in separate tools is deliberate: it stops a level from quietly becoming a trade trigger in your mind before your plan has agreed to it.</p>
+<p>💡 <strong>Tip.</strong> If you run this alongside an execution product, decide in advance which tool owns which decision, and write it down. Most tool conflicts are really undocumented role conflicts.</p>
+<p>📝 <strong>Exercise 1.</strong> Write one sentence for each of the four elements in the table above, stating what it tells you about <em>participation</em>. No price predictions — only evidence.</p>
+<p>❓ <strong>Review Questions</strong>
+1. Why is a market map deliberately unable to issue a trade signal?
+2. Name the two tests a gap must pass before this indicator draws it.
+3. Which THECC product owns the entry decision when you pair it with this one?</p>
+<hr />
+<h1 id="chapter-2-installation">Chapter 2 — Installation</h1>
+<h2 id="step-1-add-the-indicator-in-tradingview">Step 1: Add the indicator in TradingView</h2>
+<ol>
+<li>Open TradingView and load your chart.</li>
+<li>Open <strong>Pine Editor</strong> (bottom panel).</li>
+<li>Paste the contents of the <code>.pine</code> file supplied with your licence.</li>
+<li>Click <strong>Add to chart</strong>.</li>
+<li>Confirm the title reads <strong>THECC FVG PRO</strong> in the top-left legend of your chart.</li>
+</ol>
+<p>✅ <strong>Do this.</strong> Save the script to your TradingView account (<strong>Save</strong>, then name it). Alerts can only be attached to a saved indicator.</p>
+<p>📸 <em>Screenshot placeholder — Pine Editor with the script loaded and the indicator added to an NQ 5-minute chart.</em></p>
+<h2 id="step-2-recommended-chart">Step 2: Recommended chart</h2>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Recommendation</th>
+<th>Reason</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Symbol</td>
+<td>A liquid future or index (for example NQ, ES)</td>
+<td>Honest volume and clean gaps</td>
+</tr>
+<tr>
+<td>Chart type</td>
+<td>Standard candles</td>
+<td>The detection reads real highs, lows and closes</td>
+</tr>
+<tr>
+<td>Session</td>
+<td>Regular trading hours while learning</td>
+<td>Overnight gaps distort the size filters</td>
+</tr>
+<tr>
+<td>Theme</td>
+<td>Either — the zones are semi-transparent by design</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<p>⚠️ <strong>Non-standard chart types change what you see.</strong> Heikin Ashi, Renko and Range bars synthesize their own prices, so any gap detected on them is a gap in a derived series, not in the market. Learn on standard candles.</p>
+<h2 id="step-3-timeframes">Step 3: Timeframes</h2>
+<table>
+<thead>
+<tr>
+<th>Trading style</th>
+<th>Chart timeframe</th>
+<th>Detection mode (Chapter 4)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Scalping</td>
+<td>M1 – M5</td>
+<td>Fix on M15</td>
+</tr>
+<tr>
+<td>Intraday</td>
+<td>M5 – M15</td>
+<td>Multi-Fix M5 / M15 / H1</td>
+</tr>
+<tr>
+<td>Swing</td>
+<td>H1 – D</td>
+<td>Multi-Fix M15 / H1 / D</td>
+</tr>
+</tbody>
+</table>
+<h2 id="step-4-default-settings">Step 4: Default settings</h2>
+<p>The defaults ship deliberately conservative: <strong>Close invalidation</strong>, <strong>Average Range filtering</strong>, <strong>Extreme sensitivity</strong>, structure and equal levels on, sweeps on, and alerts gated to bar close.</p>
+<p>✅ <strong>Do this.</strong> Trade the defaults for one full week and keep notes before changing anything. You cannot tell what a setting does for you until you know what the default looked like.</p>
+<p>📝 <strong>Exercise 2.</strong> Install the indicator on your primary symbol, set the chart per the table above, and record in your journal: symbol, chart timeframe, detection mode, and the number of live zones visible on screen.</p>
+<p>❓ <strong>Review Questions</strong>
+1. Why must the script be saved before you can create an alert?
+2. Why is a Heikin Ashi chart a poor place to learn gap detection?
+3. What are the three defaults that make the shipped configuration conservative?</p>
+<hr />
+<h1 id="chapter-3-indicator-walkthrough">Chapter 3 — Indicator Walkthrough</h1>
+<p>📸 <em>Screenshot placeholder — annotated chart showing every element in this chapter.</em></p>
+<h2 id="31-the-zones-the-main-event">3.1 The zones (the main event)</h2>
+<p>A zone is drawn when three consecutive bars leave an untraded range <strong>and</strong> that range survives both quality tests.</p>
+<table>
+<thead>
+<tr>
+<th>Direction</th>
+<th>Geometry</th>
+<th>Confirmation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Bullish</td>
+<td>Bar 3 low is above bar 1 high</td>
+<td>Bar 2 must close above bar 1's high</td>
+</tr>
+<tr>
+<td>Bearish</td>
+<td>Bar 3 high is below bar 1 low</td>
+<td>Bar 2 must close below bar 1's low</td>
+</tr>
+</tbody>
+</table>
+<p>The box spans the untraded range only — not the bars that created it.</p>
+<p>⚠️ <strong>Zones are created on confirmed bars.</strong> A zone never appears mid-bar and then disappears. In the Academy's terminology, <em>confirmed</em> means the candle has closed and the result is locked.</p>
+<h2 id="32-the-volume-split-and-the-percentage">3.2 The volume split and the percentage</h2>
+<p>Inside each zone sit two coloured bars and a figure such as <code>12.4K (68%)</code>.</p>
+<ul>
+<li><code>12.4K</code> is the <strong>total volume of the three bars</strong> that built the gap.</li>
+<li>The two bars show how that volume <strong>divided between the upper and lower half</strong> of the zone.</li>
+<li><code>(68%)</code> is the smaller side divided by the larger side. <strong>A high percentage means the volume was evenly spread. A low percentage means it was concentrated on one side.</strong></li>
+</ul>
+<p>💡 <strong>Tip.</strong> Read the percentage as <em>balance</em>, never as quality or probability. It describes how the level was built, not what it will do.</p>
+<h2 id="33-the-midpoint-line">3.3 The midpoint line</h2>
+<p>The dashed line across a zone marks its <strong>50% level</strong>. Many traders treat the midpoint as the decision point inside a zone: reaction at or before the midpoint is a stronger response than one that requires the whole zone to be consumed.</p>
+<h2 id="34-combined-zones">3.4 Combined zones</h2>
+<p>When two or more same-direction zones overlap, the indicator merges them into one larger zone and tags the text with <code>[Combined]</code>. Their volumes are added together.</p>
+<p>A combined zone is a <strong>wider, better-attended area</strong> than any of its parts. Treat it as more significant, and remember that its edges are further apart, which changes where invalidation sits.</p>
+<h2 id="35-historic-invalidated-zones">3.5 Historic (invalidated) zones</h2>
+<p>When price consumes a zone, the box stops at the bar that consumed it and remains on the chart in its historic style.</p>
+<p>✅ <strong>Do this.</strong> Keep historic zones on while you are learning. They are the record that lets you audit the levels you did not take. Switch them off only when screen clutter is costing you decisions.</p>
+<h2 id="36-market-structure-mss-and-bos">3.6 Market structure — MSS and BOS</h2>
+<p>The indicator tracks confirmed swing highs and lows, then reports two events:</p>
+<table>
+<thead>
+<tr>
+<th>Event</th>
+<th>Condition</th>
+<th>Meaning</th>
+<th>Default style</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>BOS</strong> — Break of Structure</td>
+<td>Close beyond the most recent swing <strong>in the direction already established</strong></td>
+<td>Continuation</td>
+<td>Dotted line + <code>BOS</code></td>
+</tr>
+<tr>
+<td><strong>MSS</strong> — Market Structure Shift</td>
+<td>Close beyond the most recent <strong>opposing</strong> swing</td>
+<td>The established direction has stopped</td>
+<td>Solid line + <code>MSS</code></td>
+</tr>
+</tbody>
+</table>
+<p>Both events require a <strong>close</strong>. A wick through a swing is not a break in this indicator, by design.</p>
+<p>⚠️ A repeated break of a level already marked is suppressed, so you see one line per level rather than a stack of identical ones.</p>
+<h2 id="37-equal-highs-and-equal-lows">3.7 Equal highs and equal lows</h2>
+<p>Two consecutive confirmed pivots within your tolerance percentage draw a dashed line at their average, tagged <code>EQH</code> above or <code>EQL</code> below.</p>
+<p>⚠️ <strong>These levels arrive late, and that is deliberate.</strong> A pivot needs bars on both sides before it is confirmed, so the shelf is drawn <code>Swing length</code> bars after the second pivot printed (five bars on the default). The alternative — drawing it immediately — would mean a level that repaints. Use equal levels as <strong>preparation</strong>, never as a trigger.</p>
+<h2 id="38-liquidity-sweeps">3.8 Liquidity sweeps</h2>
+<table>
+<thead>
+<tr>
+<th>Label position</th>
+<th>Condition</th>
+<th>Reads as</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Above the bar</td>
+<td>Price takes out the highest high of the lookback window, then closes back <strong>below</strong> it on a down-closing bar</td>
+<td>Rejection of higher prices — context for shorts</td>
+</tr>
+<tr>
+<td>Below the bar</td>
+<td>Price takes out the lowest low of the lookback window, then closes back <strong>above</strong> it on an up-closing bar</td>
+<td>Rejection of lower prices — context for longs</td>
+</tr>
+</tbody>
+</table>
+<p>⚠️ <strong>"Buy-side" names the side of the order book that was taken, not an instruction to buy.</strong> A buy-side sweep is evidence against higher prices.</p>
+<p>💡 <strong>Tip.</strong> Sweep labels are evaluated on the live bar, so a label can appear and then vanish before the bar closes. Only a closed bar is evidence. This is why alerts are gated to bar close by default.</p>
+<h2 id="39-skull-mode">3.9 Skull Mode</h2>
+<p>Skull Mode strips each zone to its dotted midpoint line and two very faint grey or black volume bars. The levels stay on the chart; the visual weight does not.</p>
+<p>Use it when the boxes are dominating your read of price action, or for screenshots where price must be the subject.</p>
+<h2 id="310-colors-at-a-glance">3.10 Colors at a glance</h2>
+<table>
+<thead>
+<tr>
+<th>Element</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Bullish zone</td>
+<td>Green, semi-transparent</td>
+</tr>
+<tr>
+<td>Bearish zone</td>
+<td>Red, semi-transparent</td>
+</tr>
+<tr>
+<td>Zone text</td>
+<td>White</td>
+</tr>
+<tr>
+<td>Combined zone</td>
+<td>Same direction color, slightly stronger</td>
+</tr>
+<tr>
+<td>MSS bullish / bearish</td>
+<td>Green / red solid line</td>
+</tr>
+<tr>
+<td>BOS bullish / bearish</td>
+<td>Green / red dotted line</td>
+</tr>
+<tr>
+<td>EQH / EQL</td>
+<td>Red / yellow-green dashed line</td>
+</tr>
+<tr>
+<td>Sweep labels</td>
+<td>Red above, yellow-green below</td>
+</tr>
+<tr>
+<td>Skull Mode</td>
+<td>Light grey, black, grey midpoint</td>
+</tr>
+</tbody>
+</table>
+<p>📝 <strong>Exercise 3.</strong> On a chart with at least twenty visible zones, find one of each: a live zone, a historic zone, a combined zone, a BOS line, an MSS line, and a sweep label. Screenshot each and label it in your journal.</p>
+<p>❓ <strong>Review Questions</strong>
+1. What must the middle bar do before a gap is accepted?
+2. What does a <em>low</em> volume percentage tell you about how a zone was built?
+3. Why does an equal-level line arrive several bars late, and why is that preferable?
+4. State the difference between BOS and MSS in one sentence each.</p>
+<hr />
+<h1 id="chapter-4-timeframe-modes">Chapter 4 — Timeframe Modes</h1>
+<p>The zones you see do not have to come from the chart you are looking at. This is the single most valuable feature in the product, and the one most often left on its default.</p>
+<h2 id="41-the-three-modes">4.1 The three modes</h2>
+<table>
+<thead>
+<tr>
+<th>Mode</th>
+<th>What it detects on</th>
+<th>Use it when</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Auto</strong></td>
+<td>The chart's own timeframe</td>
+<td>You want the tool to follow you as you change timeframe</td>
+</tr>
+<tr>
+<td><strong>Fix</strong></td>
+<td>One timeframe you choose, regardless of chart</td>
+<td>You execute on a low timeframe but take levels from a higher one</td>
+</tr>
+<tr>
+<td><strong>Multi-Fix</strong></td>
+<td>Up to four timeframes at once, plus optionally the chart's own</td>
+<td>You want to see which levels agree across timeframes</td>
+</tr>
+</tbody>
+</table>
+<h2 id="42-why-fix-matters">4.2 Why Fix matters</h2>
+<p>On an M1 chart in Auto mode, you see M1 gaps: small, numerous, consumed quickly. Set <strong>Fix = M15</strong> and you sit on the same M1 chart while the zones on it are M15 zones, drawn at their true M15 width.</p>
+<p>✅ <strong>Do this.</strong> Choose the timeframe your bias actually comes from, fix detection there, then drop to your execution chart. Your levels stop moving every time you change chart timeframe — and levels that move are levels you cannot plan around.</p>
+<h2 id="43-why-multi-fix-matters-overlap">4.3 Why Multi-Fix matters: overlap</h2>
+<p>In Multi-Fix, every zone is tagged with the timeframe that produced it: <code>M5</code>, <code>M15</code>, <code>H1</code>, <code>D</code>.</p>
+<p>An M5 zone sitting inside an H1 zone is a materially different level from an M5 zone floating on its own. Two or three timeframes marking the same price is the highest-agreement evidence this indicator produces.</p>
+<p>📊 <em>Diagram placeholder — one H1 zone with two M5 zones nested inside it, overlap region shaded.</em></p>
+<p>💡 <strong>Tip.</strong> Use three timeframes, not four: one for bias, one for the trade, one for execution. The fourth slot usually adds clutter rather than information.</p>
+<h2 id="44-the-cost">4.4 The cost</h2>
+<p>Each active timeframe is a separate data request and its own set of zones. Four timeframes can ask for four times the drawing objects — and TradingView's limits are fixed. Chapter 11 covers the arithmetic; the short version is that <strong>Multi-Fix requires you to reduce "Zones kept per timeframe"</strong>.</p>
+<p>📝 <strong>Exercise 4.</strong> Put your chart on M5. Record the number of zones in Auto mode. Switch to Fix = H1 and record it again. Then Multi-Fix M5/M15/H1. Write one sentence on which configuration you could actually trade from.</p>
+<p>❓ <strong>Review Questions</strong>
+1. In Fix mode on an M1 chart with Fix = M15, how wide is a zone drawn?
+2. What does a timeframe tag tell you in Multi-Fix mode?
+3. What must you lower when you enable several Multi-Fix timeframes?</p>
+<hr />
+<h1 id="chapter-5-reading-the-map">Chapter 5 — Reading the Map</h1>
+<p>This chapter is the professional core of the course. Everything before it described what appears on screen; this describes how the elements relate.</p>
+<h2 id="51-the-four-questions">5.1 The four questions</h2>
+<table>
+<thead>
+<tr>
+<th>Question</th>
+<th>The element that answers it</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Where is unfinished business?</td>
+<td>Fair value gap zones</td>
+</tr>
+<tr>
+<td>Where are protective orders sitting?</td>
+<td>Equal highs / equal lows</td>
+</tr>
+<tr>
+<td>Has anyone tried those orders and failed?</td>
+<td>Liquidity sweeps</td>
+</tr>
+<tr>
+<td>Has the market stopped doing what it was doing?</td>
+<td>MSS, then BOS for continuation</td>
+</tr>
+</tbody>
+</table>
+<h2 id="52-the-sequence">5.2 The sequence</h2>
+<p>The elements in this indicator are most informative in one particular order:</p>
+<ol>
+<li><strong>Map.</strong> On your bias timeframe, note the unfilled zones above and below price. This is the terrain.</li>
+<li><strong>Liquidity.</strong> Mark the equal-level shelves and the obvious session extremes. This is where stops sit.</li>
+<li><strong>Sweep.</strong> Wait for price to run one of those levels and close back inside it. An attempt has now failed.</li>
+<li><strong>Shift.</strong> Wait for MSS in the direction of that rejection. Until structure confirms, a sweep is one wick.</li>
+<li><strong>Level.</strong> The displacement that produced the shift normally leaves a fresh zone behind. That zone, or its midpoint, is the area of interest.</li>
+<li><strong>Invalidation.</strong> Decide where the idea is objectively wrong — beyond the sweep extreme, or a body close back through the zone — <strong>before</strong> deciding where you would enter.</li>
+<li><strong>Size.</strong> Only now. If the distance from entry to invalidation does not fit your risk limit, there is no trade, however convincing the picture.</li>
+</ol>
+<p>⚠️ <strong>Steps 1 to 5 are what this indicator shows you. Steps 6 and 7 are what keep you solvent, and the indicator has no opinion about either.</strong></p>
+<h2 id="53-institutional-notes">5.3 Institutional notes</h2>
+<ul>
+<li><strong>Imbalance is not a magnet.</strong> A gap is a record of what happened, not a commitment that price will return. Most unfilled gaps on any chart stay unfilled for a long time.</li>
+<li><strong>A sweep needs a reason to exist.</strong> Ask what liquidity was worth collecting at that level. A sweep of an obvious shelf before a session open is a different event from a random wick in a quiet hour.</li>
+<li><strong>Continuation is the base case.</strong> BOS after BOS is the market telling you it is still working. Most MSS events in a strong trend are pauses, not reversals — which is exactly why step 4 requires the close and step 6 comes before step 7.</li>
+<li><strong>Timeframe agreement outranks zone beauty.</strong> A scruffy zone confirmed by two higher timeframes is worth more than a perfect-looking M1 gap alone.</li>
+</ul>
+<h2 id="54-worked-example-a-the-full-sequence">5.4 Worked example A — the full sequence</h2>
+<p>📸 <em>Screenshot placeholder — sweep, MSS, retrace into the new zone, with invalidation marked.</em></p>
+<ol>
+<li><code>EQH</code> prints on the bias timeframe: two highs within tolerance, a clear shelf.</li>
+<li>Price runs above that shelf and closes back below it. A <strong>buy-side sweep</strong> label prints. Higher prices were rejected.</li>
+<li>Displacement lower follows. Price closes below the most recent swing low: <strong>MSS bearish</strong>.</li>
+<li>That displacement leaves a fresh <strong>bearish zone</strong> above.</li>
+<li>Invalidation is defined first: a body close back above the zone, or above the sweep high.</li>
+<li>Only then is entry and size considered, inside the plan.</li>
+</ol>
+<h2 id="55-worked-example-b-the-sequence-that-fails">5.5 Worked example B — the sequence that fails</h2>
+<p>📸 <em>Screenshot placeholder — sweep with no shift, price continuing through.</em></p>
+<ol>
+<li>A sell-side sweep prints below an <code>EQL</code> shelf.</li>
+<li>No MSS follows. Structure keeps printing bearish BOS lines.</li>
+<li>Price continues lower and consumes the zone the sweep created.</li>
+</ol>
+<p><strong>Reading:</strong> the sweep was a pause inside a trend, not a turn. Step 4 exists to keep you out of this trade. The absence of an MSS is information, not a delay.</p>
+<h2 id="56-where-the-evidence-is-weakest">5.6 Where the evidence is weakest</h2>
+<table>
+<thead>
+<tr>
+<th>Situation</th>
+<th>Why it degrades</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Thin overnight session</td>
+<td>Size filters compare against a quiet ATR, so marginal gaps pass</td>
+</tr>
+<tr>
+<td>Immediately after a news release</td>
+<td>Gaps are wide, structure flips repeatedly, sweeps fire on both sides</td>
+</tr>
+<tr>
+<td>Symbols without an honest volume feed</td>
+<td>The volume split and percentage carry little meaning — use Average Range filtering</td>
+</tr>
+<tr>
+<td>Very low timeframes on illiquid symbols</td>
+<td>Nearly every bar sequence produces geometry that looks like displacement</td>
+</tr>
+</tbody>
+</table>
+<p>📝 <strong>Exercise 5.</strong> Find two completed sequences in your own history: one where sweep → MSS → zone held, and one where the sweep was a pause. Screenshot both. Write the single observable difference that separated them.</p>
+<p>❓ <strong>Review Questions</strong>
+1. Which step in the sequence separates a wick from evidence?
+2. Why is invalidation defined before entry?
+3. Give two conditions under which the volume percentage should be ignored.</p>
+<hr />
+<h1 id="chapter-6-alerts">Chapter 6 — Alerts</h1>
+<h2 id="61-the-two-mechanisms">6.1 The two mechanisms</h2>
+<p><strong>A. Named conditions</strong> — pick one signal by name in TradingView's alert dialog:</p>
+<table>
+<thead>
+<tr>
+<th>Alert name</th>
+<th>Fires when</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MSS Bullish</code> / <code>MSS Bearish</code></td>
+<td>Structure shifts in that direction</td>
+</tr>
+<tr>
+<td><code>BOS Bullish</code> / <code>BOS Bearish</code></td>
+<td>Structure continues in that direction</td>
+</tr>
+<tr>
+<td><code>MSS (any)</code> / <code>BOS (any)</code></td>
+<td>Either direction of that event</td>
+</tr>
+<tr>
+<td><code>MSS or BOS (any)</code></td>
+<td>Any structure event</td>
+</tr>
+<tr>
+<td><code>Equal Highs (EQH)</code> / <code>Equal Lows (EQL)</code></td>
+<td>A confirmed equal-level shelf is drawn</td>
+</tr>
+<tr>
+<td><code>Buy-side liquidity sweep</code> / <code>Sell-side liquidity sweep</code></td>
+<td>A sweep prints on that side</td>
+</tr>
+<tr>
+<td><code>Liquidity sweep (any)</code></td>
+<td>Either side</td>
+</tr>
+<tr>
+<td><code>New FVG (Auto/Fix)</code></td>
+<td>A zone forms on the Auto or Fix timeframe</td>
+</tr>
+<tr>
+<td><code>New FVG TF#1</code> … <code>TF#4</code></td>
+<td>A zone forms on that Multi-Fix slot</td>
+</tr>
+</tbody>
+</table>
+<p><strong>B. One alert for everything</strong> — choose <strong>"Any alert() function call"</strong> and receive every enabled structure, equal-level and sweep event through a single alert, with a dynamic message:</p>
+<pre><code>Bullish BOS | NQ1! | 5 | level 20114.25 | close 20118.50
+</code></pre>
+<p>The fields are: direction, event, symbol, timeframe, the level that was broken, and the closing price. Add a <strong>Message prefix</strong> in the settings when a webhook or bot needs a routing tag at the front.</p>
+<h2 id="62-setup-in-order">6.2 Setup, in order</h2>
+<ol>
+<li>Save the indicator (Chapter 2, Step 1).</li>
+<li>In <strong>⊹ Alerts</strong>, switch on only the signals you will act on.</li>
+<li>Leave <strong>Fire on bar close only</strong> ON.</li>
+<li>Open the alert dialog, set Condition to <strong>THECC FVG PRO</strong>, and choose a named condition or "Any alert() function call".</li>
+<li>Set expiry and notification method in TradingView.</li>
+</ol>
+<h2 id="63-why-bar-close-gating-protects-you">6.3 Why bar-close gating protects you</h2>
+<p>With the switch ON, an alert can only fire on a <strong>confirmed</strong> bar. With it OFF, the condition is tested on every tick, so price poking through a level mid-bar can alert you to a break that has failed by the close. The switch is the difference between an alert about what happened and an alert about what nearly happened.</p>
+<p>⚠️ <strong>Three faults account for almost every "my alert did not fire":</strong>
+1. The per-signal toggle in <strong>⊹ Alerts</strong> is off.
+2. <strong>Show BOS</strong> is off, so no BOS is detected to alert on.
+3. The alert was created against a different indicator instance than the one you later re-configured.</p>
+<h2 id="64-default-alert-states">6.4 Default alert states</h2>
+<table>
+<thead>
+<tr>
+<th>Signal</th>
+<th>Default</th>
+<th>Reason</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>MSS bullish / bearish</td>
+<td>On</td>
+<td>Bias-changing, infrequent</td>
+</tr>
+<tr>
+<td>BOS bullish / bearish</td>
+<td>On</td>
+<td>Structure events, moderate frequency</td>
+</tr>
+<tr>
+<td>EQH / EQL</td>
+<td>Off</td>
+<td>Fire on every confirmed shelf — chatty by nature</td>
+</tr>
+<tr>
+<td>Liquidity sweeps</td>
+<td>Off</td>
+<td>Frequency depends entirely on your lookback</td>
+</tr>
+</tbody>
+</table>
+<p>💡 <strong>Tip.</strong> Every extra alert lowers the value of the ones that matter. Begin with <code>MSS (any)</code> only. Add a second alert when the first has earned its place in your routine.</p>
+<p>📝 <strong>Exercise 6.</strong> Create two alerts: one named <code>MSS (any)</code>, and one on "Any alert() function call" with the prefix <code>THECC</code>. Record which arrives first on your next structure event and what each message contained.</p>
+<p>❓ <strong>Review Questions</strong>
+1. Which mechanism gives you the broken level inside the message?
+2. What does "Fire on bar close only" actually change in the calculation?
+3. Name the three usual causes of an alert that never fires.</p>
+<hr />
+<h1 id="chapter-7-customization">Chapter 7 — Customization</h1>
+<p>Nothing in this build is locked. Every value that affects what you see is a setting, which makes discipline your responsibility rather than the software's.</p>
+<h2 id="71-tier-1-settings-you-will-use-weekly">7.1 Tier 1 — settings you will use weekly</h2>
+<table>
+<thead>
+<tr>
+<th>Group</th>
+<th>Settings</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>⊹ Timeframe Mode</td>
+<td>Mode, Fix TF</td>
+</tr>
+<tr>
+<td>⊹ Multi-Fix Timeframes</td>
+<td>Four slots, include chart timeframe</td>
+</tr>
+<tr>
+<td>General Configuration</td>
+<td>Zone Invalidation, Zone Filtering, Detection Sensitivity, Show Historic Zones</td>
+</tr>
+<tr>
+<td>⊹ Market Structure</td>
+<td>Show, pivot length, MSS on/off, BOS on/off</td>
+</tr>
+<tr>
+<td>⊹ Equal Highs / Lows</td>
+<td>Show, swing length, tolerance %</td>
+</tr>
+<tr>
+<td>⊹ Liquidity Sweeps</td>
+<td>Show, lookback</td>
+</tr>
+<tr>
+<td>⊹ Alerts</td>
+<td>Per-signal toggles, bar-close gating</td>
+</tr>
+</tbody>
+</table>
+<h2 id="72-tier-2-the-zone-engine-advanced">7.2 Tier 2 — the Zone Engine (advanced)</h2>
+<p>These were fixed constants in earlier builds and are now exposed. Every default equals the previous hardcoded value, so an untouched chart renders exactly as it did before.</p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Default</th>
+<th>Change it when</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Zones kept per timeframe</td>
+<td>125</td>
+<td>Always lower it for Multi-Fix — see Chapter 11</td>
+</tr>
+<tr>
+<td>Combine overlapping zones</td>
+<td>On</td>
+<td>You want each gap kept separate for study</td>
+</tr>
+<tr>
+<td>Overlap threshold %</td>
+<td>0</td>
+<td>You only want substantial overlaps merged</td>
+</tr>
+<tr>
+<td>Minimum zone duration (ms)</td>
+<td>3</td>
+<td>Rarely — this is a timestamp difference, not bars</td>
+</tr>
+<tr>
+<td>Delete untouched zones / after X bars</td>
+<td>On / 200</td>
+<td>You want very old untested levels retained</td>
+</tr>
+<tr>
+<td>Max bars back to process</td>
+<td>10000</td>
+<td>The script is slow, or you need deeper history</td>
+</tr>
+<tr>
+<td>ATR length</td>
+<td>10</td>
+<td>The size filter feels too twitchy on your symbol</td>
+</tr>
+</tbody>
+</table>
+<p>⚠️ <strong>Detection Sensitivity is a permissiveness dial, not a strictness dial.</strong> The test is <code>gap size × sensitivity &gt; ATR</code>. <strong>Extreme = 6.0</strong> admits the most zones; <strong>Low = 1.0</strong> demands the largest gaps. Read it as <em>how forgiving the filter is</em>.</p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Multiplier</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Extreme</td>
+<td>6.0</td>
+<td>Most zones</td>
+</tr>
+<tr>
+<td>High</td>
+<td>2.0</td>
+<td>Fewer, larger</td>
+</tr>
+<tr>
+<td>Normal</td>
+<td>1.5</td>
+<td>Fewer still</td>
+</tr>
+<tr>
+<td>Low</td>
+<td>1.0</td>
+<td>Only clearly oversized gaps</td>
+</tr>
+</tbody>
+</table>
+<h2 id="73-style-and-presentation">7.3 Style and presentation</h2>
+<p>Colors, transparency, border styles, label text, sizes, positions and offsets are all editable for every element, as are zone width, dynamic width, extend-latest count, the combined-zone color and tag, volume-bar side and mirroring, and the three Skull Mode colors.</p>
+<h2 id="74-the-two-values-that-cannot-be-settings">7.4 The two values that cannot be settings</h2>
+<p><code>maxBoxesCount</code> and the debug flag remain constants in the source. TradingView requires the drawing-limit arguments in the indicator declaration to be compile-time constants, so this is a platform rule, not a design choice.</p>
+<h2 id="75-changing-settings-honestly">7.5 Changing settings honestly</h2>
+<p>✅ <strong>Do this.</strong> Change one setting at a time, note the date and reason in your journal, and give it a defined number of sessions before judging it.</p>
+<p>⚠️ <strong>Never raise sensitivity until a level appears where you wanted one.</strong> That is asking the tool to confirm a decision you have already made. If you find yourself reaching for the settings panel while in a position, close the panel.</p>
+<p>📝 <strong>Exercise 7.</strong> Set Detection Sensitivity to Low, then to Extreme, on the same chart. Count zones at each. Write down which setting you will trade for the next five sessions, and why.</p>
+<p>❓ <strong>Review Questions</strong>
+1. Does Extreme sensitivity produce more zones or fewer?
+2. Which single Zone Engine setting must change when you enable Multi-Fix?
+3. Why can the drawing limits not be exposed as inputs?</p>
+<hr />
+<h1 id="chapter-8-best-practices-top-20">Chapter 8 — Best Practices (Top 20)</h1>
+<ol>
+<li><strong>Fix detection to your bias timeframe.</strong> Levels that move when you change chart are levels you cannot plan around.</li>
+<li><strong>Trade the defaults for a week</strong> before you change a single value.</li>
+<li><strong>Define invalidation before entry</strong>, every time, without exception.</li>
+<li><strong>Require the close.</strong> Wicks through zones, swings and shelves are not events in this indicator, and should not be events in your plan.</li>
+<li><strong>Wait for the shift.</strong> A sweep without an MSS is one wick with a label on it.</li>
+<li><strong>Prefer overlap.</strong> Levels confirmed by two or three timeframes outrank single-timeframe zones.</li>
+<li><strong>Respect combined zones as areas</strong>, not lines — and place invalidation beyond the whole merged range.</li>
+<li><strong>Use the midpoint as the decision point</strong> inside a zone rather than waiting for full consumption.</li>
+<li><strong>Match invalidation method to stop placement.</strong> On Close invalidation, your stop belongs beyond the body-close level.</li>
+<li><strong>Keep historic zones on while learning.</strong> They are the audit trail of the levels you skipped.</li>
+<li><strong>Size the sweep lookback to the level you actually care about</strong> — session high, prior day high, or local swing.</li>
+<li><strong>Alert on the fewest signals you can act on</strong>, starting with <code>MSS (any)</code>.</li>
+<li><strong>Leave bar-close gating on</strong> for anything you will trade.</li>
+<li><strong>Use the Average Range filter</strong> on any symbol whose volume feed you do not trust.</li>
+<li><strong>Use three Multi-Fix timeframes, not four</strong> — bias, trade, execution.</li>
+<li><strong>Lower "Zones kept per timeframe" before you add timeframes</strong>, not after the chart breaks.</li>
+<li><strong>Switch to Skull Mode</strong> when the boxes are dominating your read of price action.</li>
+<li><strong>Screenshot completed sequences</strong>, with the map visible, and review them weekly.</li>
+<li><strong>Change one setting at a time</strong>, dated, with a reason recorded.</li>
+<li><strong>Close the settings panel while in a position.</strong> Tuning under pressure is bias wearing a technical costume.</li>
+</ol>
+<hr />
+<h1 id="chapter-9-common-mistakes-top-25">Chapter 9 — Common Mistakes (Top 25)</h1>
+<ol>
+<li><strong>Trading a zone because it is on the screen.</strong> A zone is a location, not a reason.</li>
+<li><strong>Reading "buy-side sweep" as "buy".</strong> It names the side of the book that was taken. It is evidence against that direction.</li>
+<li><strong>Raising sensitivity until a level appears</strong> where you wanted one.</li>
+<li><strong>Assuming every gap gets filled.</strong> Many never do.</li>
+<li><strong>Treating the volume percentage as a quality score.</strong> It measures balance, nothing else.</li>
+<li><strong>Using EQH / EQL as an entry trigger</strong> when they are confirmed several bars late by design.</li>
+<li><strong>Acting on an intrabar sweep label</strong> that may vanish before the bar closes.</li>
+<li><strong>Mismatching invalidation and stops</strong> — running Close invalidation but stopping out on wicks.</li>
+<li><strong>Confusing MSS with reversal.</strong> A shift says the prior direction stopped, not that a new trend has begun.</li>
+<li><strong>Ignoring BOS.</strong> Continuation is the base case and BOS is how the market states it.</li>
+<li><strong>Trading the first sweep in a strong trend.</strong> Usually a pause.</li>
+<li><strong>Running four Multi-Fix timeframes at default zone counts</strong>, then blaming the indicator when old drawings vanish.</li>
+<li><strong>Leaving detection in Auto</strong> and wondering why levels change with each timeframe switch.</li>
+<li><strong>Learning on Heikin Ashi or Renko charts.</strong></li>
+<li><strong>Using the Volume Threshold filter on a symbol with no honest volume feed.</strong></li>
+<li><strong>Turning on every alert</strong>, then muting all of them a week later.</li>
+<li><strong>Disabling bar-close gating</strong> for speed, then acting on failed intrabar breaks.</li>
+<li><strong>Forgetting that BOS alerts need "Show BOS" on.</strong></li>
+<li><strong>Re-using an old alert</strong> after re-configuring the indicator instance it was attached to.</li>
+<li><strong>Judging a settings change after two trades.</strong> Neither outcome was caused by the setting.</li>
+<li><strong>Treating a small zone on a low timeframe as equivalent to a large higher-timeframe zone.</strong></li>
+<li><strong>Trading into the news release</strong> because the map looked clean beforehand.</li>
+<li><strong>Stacking this indicator with three other gap tools.</strong> You get agreement by construction, not by evidence.</li>
+<li><strong>Sizing the position first</strong> and looking for invalidation afterwards.</li>
+<li><strong>Blaming the tool for a plan you did not write down.</strong></li>
+</ol>
+<hr />
+<h1 id="chapter-10-frequently-asked-questions-50">Chapter 10 — Frequently Asked Questions (50)</h1>
+<p><strong>Detection</strong></p>
+<ol>
+<li><strong>Why is there no zone on an obvious gap?</strong> It failed a filter: the middle bar did not close through the edge, the move was small against ATR, or the bar-to-bar jump exceeded ATR with Allow Gaps off.</li>
+<li><strong>What exactly is the middle-bar rule?</strong> For a bullish gap, bar 2 must close above bar 1's high; for a bearish gap, below bar 1's low.</li>
+<li><strong>Does the zone include the bars that made it?</strong> No. Only the untraded range.</li>
+<li><strong>Same Type or All?</strong> Same Type requires three bars of the same direction — cleanest. All accepts mixed sequences and produces more zones.</li>
+<li><strong>Which filter should I use?</strong> Average Range for any symbol; Volume Threshold only where volume is honest.</li>
+<li><strong>What does Volume Threshold % compare?</strong> The 5-bar average volume against the 15-bar average.</li>
+<li><strong>Does sensitivity make detection stricter?</strong> No — higher settings are more permissive.</li>
+<li><strong>What happens if I untick the sensitivity checkbox?</strong> Both size checks are disabled and every geometric gap is drawn. Useful for study, too noisy to trade.</li>
+<li><strong>What is Allow Gaps Between Bars for?</strong> Accepting session and news gaps that the ATR jump check otherwise rejects.</li>
+<li><strong>Why does the ATR length matter?</strong> It is the reference for both size tests. Longer is smoother and rejects fewer zones on a single volatile bar.</li>
+<li><strong>Can a zone appear and then disappear?</strong> Zones are created on confirmed bars, so no. Their appearance can change when zones merge.</li>
+<li><strong>Does the indicator repaint?</strong> Zones and structure do not. Sweep labels are evaluated on the live bar and are only evidence once the bar closes.</li>
+<li><strong>Why do some zones stop mid-chart?</strong> They were invalidated there.</li>
+<li><strong>What is <code>[Combined]</code>?</strong> Two or more overlapping same-direction zones merged into one.</li>
+<li><strong>Can I stop zones merging?</strong> Yes — switch off Combine overlapping zones.</li>
+</ol>
+<p><strong>Display</strong></p>
+<ol start="16">
+<li><strong>Why do old zones vanish?</strong> You are past TradingView's drawing budget. See Chapter 11.</li>
+<li><strong>How many drawing objects does a zone cost?</strong> Four boxes and two lines.</li>
+<li><strong>Why does the volume text read <code>FVG</code> with no number?</strong> No volume feed for that symbol.</li>
+<li><strong>What is the number in brackets?</strong> Volume balance between the zone's halves — high means evenly split.</li>
+<li><strong>What is the dashed line inside a zone?</strong> The 50% midpoint.</li>
+<li><strong>Why is there a <code>M15</code> prefix on some zones?</strong> Multi-Fix mode tags each zone with its source timeframe.</li>
+<li><strong>What is Skull Mode for?</strong> Keeping levels while removing nearly all visual weight.</li>
+<li><strong>Can I move the volume bars to the other side?</strong> Yes — Volume bars on left side.</li>
+<li><strong>What does Mirror volume bars do?</strong> Controls whether the two bars grow from the same edge or toward each other.</li>
+<li><strong>Can I change zone width?</strong> Yes — Extend zones by (bars), measured in the zone's own timeframe.</li>
+<li><strong>What does Dynamic width do?</strong> Draws an invalidated zone from its start to the bar that consumed it.</li>
+<li><strong>Why do the newest zones reach the current bar?</strong> Extend latest zones to current bar, three by default.</li>
+<li><strong>Can I hide invalidated zones?</strong> Switch off Show Historic Zones.</li>
+<li><strong>Why is the zone start on the third bar?</strong> Start Zones From defaults to Last Bar, which is honest about when the gap was confirmed. First Bar covers the whole formation.</li>
+<li><strong>Are the colors theme-aware?</strong> They are semi-transparent and work on both themes; all are editable.</li>
+</ol>
+<p><strong>Structure, levels and sweeps</strong></p>
+<ol start="31">
+<li><strong>What is the difference between MSS and BOS?</strong> MSS is a close through the most recent <em>opposing</em> swing — direction stopped. BOS is a close through the most recent swing in the <em>same</em> direction — continuation.</li>
+<li><strong>Do wicks count?</strong> No. Both require a close.</li>
+<li><strong>What does pivot length change?</strong> How large a swing must be to count. Higher means fewer, more significant events.</li>
+<li><strong>Why is the same level not marked twice?</strong> Repeat breaks of a marked level are suppressed.</li>
+<li><strong>What does "Clear previous structure lines on each new MSS" do?</strong> Wipes earlier structure drawings on every shift, leaving only the current leg.</li>
+<li><strong>Why are equal levels late?</strong> Pivots need bars on both sides to be confirmed. The alternative repaints.</li>
+<li><strong>What tolerance should I use for equal levels?</strong> Start at the default and raise it on volatile symbols. It is a percentage of price, so it scales.</li>
+<li><strong>What is a liquidity sweep here, precisely?</strong> Price takes out the lookback high or low, excluding the current bar, then closes back inside against the direction of the run.</li>
+<li><strong>Does the sweep lookback include the current bar?</strong> No.</li>
+<li><strong>What lookback should I use?</strong> 10–20 for local sweeps, 50–200 for long-standing levels.</li>
+<li><strong>Why do my sweep labels disappear?</strong> Either the bar closed without meeting the condition, or the label cap removed the oldest.</li>
+<li><strong>Are MSS, EQH/EQL and sweeps multi-timeframe?</strong> No. They are computed on the chart timeframe; only the zones follow Fix and Multi-Fix.</li>
+</ol>
+<p><strong>Alerts and operation</strong></p>
+<ol start="43">
+<li><strong>Which alert gives me the broken level?</strong> The dynamic <code>alert()</code> route — "Any alert() function call".</li>
+<li><strong>What does the message prefix do?</strong> Prepends a routing tag for a webhook or bot.</li>
+<li><strong>Why did my BOS alert never fire?</strong> Show BOS is off, so no BOS was detected.</li>
+<li><strong>Why are sweep and equal-level alerts off by default?</strong> They fire far more often than structure events.</li>
+<li><strong>Can I get one alert for everything?</strong> Yes — "Any alert() function call".</li>
+<li><strong>Does the script limit alert frequency?</strong> Yes, once per bar per event.</li>
+<li><strong>Is this indicator a signal service?</strong> No. It is a market map and issues no buy or sell signals.</li>
+<li><strong>Which build does this guide describe?</strong> FVG PRO v2.1.x. Check the version in the guide header against your script header before relying on any detail.</li>
+</ol>
+<hr />
+<h1 id="chapter-11-troubleshooting">Chapter 11 — Troubleshooting</h1>
+<h2 id="111-the-drawing-budget-read-this-first">11.1 The drawing budget — read this first</h2>
+<p>TradingView allows this indicator <strong>500 boxes, 500 lines and 500 labels</strong> in total. Each rendered zone costs <strong>4 boxes and 2 lines</strong>, so:</p>
+<blockquote>
+<p><strong>500 boxes ÷ 4 = about 125 zones across every active timeframe — not per timeframe.</strong></p>
+</blockquote>
+<p>The default "Zones kept per timeframe" is 125, which is the entire box budget for a single timeframe. Add Multi-Fix timeframes without lowering it and TradingView silently discards the oldest objects, which is what people see as "old zones missing" or "half-drawn boxes".</p>
+<table>
+<thead>
+<tr>
+<th>Active detection timeframes</th>
+<th>Suggested zones kept per timeframe</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1 (Auto or Fix)</td>
+<td>100–125</td>
+</tr>
+<tr>
+<td>2</td>
+<td>55</td>
+</tr>
+<tr>
+<td>3</td>
+<td>35</td>
+</tr>
+<tr>
+<td>4</td>
+<td>30</td>
+</tr>
+<tr>
+<td>5 (four slots + chart)</td>
+<td>25</td>
+</tr>
+</tbody>
+</table>
+<p>Labels are shared between structure, equal levels and sweeps: BOS lines are capped by <strong>Max BOS lines</strong> (50), equal-level drawings by <strong>Max EQH/EQL drawings</strong> (20), and sweeps by <strong>Max sweep labels to keep</strong> (50).</p>
+<h2 id="112-fault-table">11.2 Fault table</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Likely cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Old zones missing or partly drawn</td>
+<td>Box budget exhausted</td>
+<td>Lower Zones kept per timeframe per the table above</td>
+</tr>
+<tr>
+<td>Structure labels disappearing</td>
+<td>Label budget shared with sweeps</td>
+<td>Lower Max sweep labels, or Max BOS lines</td>
+</tr>
+<tr>
+<td>No zones at all</td>
+<td>Filter too selective, or an empty timeframe slot</td>
+<td>Check sensitivity, filter method, and that Fix / Multi-Fix slots are not blank</td>
+</tr>
+<tr>
+<td>Zones only on recent bars</td>
+<td>Max bars back to process</td>
+<td>Raise it, or accept it — it exists to keep the script fast</td>
+</tr>
+<tr>
+<td>Script times out or is slow</td>
+<td>Too many timeframes × zones</td>
+<td>Fewer slots, fewer zones, shorter history</td>
+</tr>
+<tr>
+<td>Volume text shows <code>FVG</code> only</td>
+<td>Symbol has no volume feed</td>
+<td>Expected; use Average Range filtering</td>
+</tr>
+<tr>
+<td>Too many small zones</td>
+<td>Sensitivity too permissive</td>
+<td>Move Extreme → High → Normal</td>
+</tr>
+<tr>
+<td>Too few zones</td>
+<td>Sensitivity too strict, or Same Type detection</td>
+<td>Raise sensitivity, or set FVG Detection to All</td>
+</tr>
+<tr>
+<td>Equal levels feel late</td>
+<td>Pivot confirmation requires bars on both sides</td>
+<td>Working as designed — use them as preparation</td>
+</tr>
+<tr>
+<td>Sweep labels flicker</td>
+<td>Evaluated on the live bar</td>
+<td>Wait for the close; alerts are gated for this reason</td>
+</tr>
+<tr>
+<td>Alert never fires</td>
+<td>Toggle off · Show BOS off · stale alert instance</td>
+<td>Chapter 6.3</td>
+</tr>
+<tr>
+<td>Zones differ from a colleague's chart</td>
+<td>Different mode, sensitivity, session or symbol</td>
+<td>Compare settings before comparing charts</td>
+</tr>
+</tbody>
+</table>
+<p>📝 <strong>Exercise 8.</strong> Deliberately reproduce the drawing-budget fault: set four Multi-Fix timeframes with 125 zones each and note what happens to the oldest zones. Then apply the table and confirm it resolves.</p>
+<p>❓ <strong>Review Questions</strong>
+1. How many drawing objects does one zone consume?
+2. How many zones can be displayed in total, across all timeframes?
+3. Give two causes of a label disappearing that are not a bug.</p>
+<hr />
+<h1 id="chapter-12-quick-reference-printable-cheat-sheet">Chapter 12 — Quick Reference (Printable Cheat Sheet)</h1>
+<h2 id="on-chart-legend">On-chart legend</h2>
+<table>
+<thead>
+<tr>
+<th>Mark</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Coloured box</td>
+<td>Fair value gap zone (bullish or bearish)</td>
+</tr>
+<tr>
+<td>Two bars inside the box</td>
+<td>Volume split between the zone's halves</td>
+</tr>
+<tr>
+<td><code>12.4K (68%)</code></td>
+<td>Three-bar volume · how evenly it split (high % = even)</td>
+</tr>
+<tr>
+<td><code>M15 ·</code> prefix</td>
+<td>Multi-Fix zone, tagged with its source timeframe</td>
+</tr>
+<tr>
+<td><code>[Combined]</code></td>
+<td>Overlapping same-direction zones merged</td>
+</tr>
+<tr>
+<td>Box ending mid-chart</td>
+<td>Invalidated at that bar</td>
+</tr>
+<tr>
+<td>Box reaching the current bar</td>
+<td>One of the most recent live zones</td>
+</tr>
+<tr>
+<td>Dashed line inside a box</td>
+<td>50% midpoint</td>
+</tr>
+<tr>
+<td>Solid line + <code>MSS</code></td>
+<td>Structure shifted — closed through the last opposing swing</td>
+</tr>
+<tr>
+<td>Dotted line + <code>BOS</code></td>
+<td>Structure continued — closed through the last swing</td>
+</tr>
+<tr>
+<td>Dashed level + <code>EQH</code> / <code>EQL</code></td>
+<td>Shelf of two near-equal pivots</td>
+</tr>
+<tr>
+<td><code>$ sweep</code> above a bar</td>
+<td>Buy-side sweep — high taken, closed back below → context for shorts</td>
+</tr>
+<tr>
+<td><code>$ sweep</code> below a bar</td>
+<td>Sell-side sweep — low taken, closed back above → context for longs</td>
+</tr>
+</tbody>
+</table>
+<h2 id="detection-one-line-each">Detection, one line each</h2>
+<ul>
+<li><strong>Zone</strong> — three-bar gap + middle bar closes through the edge + passes the size or volume filter. Confirmed bars only.</li>
+<li><strong>MSS</strong> — close beyond the most recent <strong>opposing</strong> swing. Direction stopped.</li>
+<li><strong>BOS</strong> — close beyond the most recent swing in the <strong>same</strong> direction. Continuation.</li>
+<li><strong>EQH / EQL</strong> — two consecutive pivots within tolerance, drawn <code>Swing length</code> bars later.</li>
+<li><strong>Sweep</strong> — takes out the lookback high or low, then closes back inside, against the run.</li>
+</ul>
+<h2 id="sensitivity">Sensitivity</h2>
+<p><code>gap size × sensitivity &gt; ATR</code> → <strong>Extreme 6.0</strong> (most zones) · High 2.0 · Normal 1.5 · <strong>Low 1.0</strong> (fewest, largest)</p>
+<h2 id="the-sequence">The sequence</h2>
+<p>Map → liquidity → <strong>sweep</strong> → <strong>MSS</strong> → the zone the shift left → invalidation → size.</p>
+<h2 id="drawing-budget">Drawing budget</h2>
+<p>500 boxes / 500 lines / 500 labels. <strong>One zone = 4 boxes + 2 lines → about 125 zones across all timeframes.</strong> Multi-Fix with four slots → 30 zones per timeframe.</p>
+<h2 id="defaults-worth-memorising">Defaults worth memorising</h2>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Zone Invalidation</td>
+<td>Close (body must close through)</td>
+</tr>
+<tr>
+<td>Zone Filtering</td>
+<td>Average Range</td>
+</tr>
+<tr>
+<td>Detection Sensitivity</td>
+<td>Extreme</td>
+</tr>
+<tr>
+<td>Zones kept per timeframe</td>
+<td>125</td>
+</tr>
+<tr>
+<td>Delete untouched zones after</td>
+<td>200 bars</td>
+</tr>
+<tr>
+<td>ATR length</td>
+<td>10</td>
+</tr>
+<tr>
+<td>Pivot length (MSS / BOS)</td>
+<td>5</td>
+</tr>
+<tr>
+<td>Max BOS lines</td>
+<td>50</td>
+</tr>
+<tr>
+<td>EQ swing length / tolerance</td>
+<td>5 / 0.02%</td>
+</tr>
+<tr>
+<td>Sweep lookback / max labels</td>
+<td>20 / 50</td>
+</tr>
+<tr>
+<td>Fire on bar close only</td>
+<td>On</td>
+</tr>
+<tr>
+<td>MSS + BOS alerts / EQ + sweep alerts</td>
+<td>On / Off</td>
+</tr>
+</tbody>
+</table>
+<h2 id="alert-names">Alert names</h2>
+<p><code>MSS Bullish</code> · <code>MSS Bearish</code> · <code>BOS Bullish</code> · <code>BOS Bearish</code> · <code>MSS (any)</code> · <code>BOS (any)</code> · <code>MSS or BOS (any)</code> · <code>Equal Highs (EQH)</code> · <code>Equal Lows (EQL)</code> · <code>Buy-side liquidity sweep</code> · <code>Sell-side liquidity sweep</code> · <code>Liquidity sweep (any)</code> · <code>New FVG (Auto/Fix)</code> · <code>New FVG TF#1</code>–<code>TF#4</code> · or <strong>Any alert() function call</strong></p>
+<hr />
+<h1 id="appendix-a-certification-quiz">Appendix A — Certification Quiz</h1>
+<p><strong>20 questions · pass mark 80% (16 correct) · closed book.</strong></p>
+<ol>
+<li>What must the middle bar of a three-bar sequence do before a zone is drawn?</li>
+<li>State the size test applied to the gap, including the role of sensitivity.</li>
+<li>Does Extreme sensitivity admit more zones or fewer than Low?</li>
+<li>What does the percentage in a zone's text measure?</li>
+<li>On a bullish zone, which bars' volume is shown in the upper half?</li>
+<li>What does <code>[Combined]</code> indicate, and how does it affect invalidation placement?</li>
+<li>Define <em>confirmed</em> as the Academy uses the term.</li>
+<li>Which elements of this indicator can change intrabar, and which cannot?</li>
+<li>State the difference between MSS and BOS in one sentence each.</li>
+<li>Why does a repeated break of the same level not draw a second line?</li>
+<li>Why are equal-level lines drawn several bars after the second pivot?</li>
+<li>Define a buy-side liquidity sweep precisely, and state which direction it is evidence for.</li>
+<li>Does the sweep lookback window include the current bar?</li>
+<li>Which elements follow Fix / Multi-Fix timeframes, and which are always chart-timeframe?</li>
+<li>In Fix mode = M15 on an M1 chart, how wide is a zone drawn?</li>
+<li>Give the seven steps of the reading sequence in order.</li>
+<li>At which step is position size decided, and why not earlier?</li>
+<li>How many boxes and lines does one rendered zone consume, and what is the total zone budget?</li>
+<li>Name the three usual causes of an alert that does not fire.</li>
+<li>Which two decisions does this indicator never make for you?</li>
+</ol>
+<p><em>Answers are held in the Instructor Answer Key (<code>THECC-DOC-FVGPRO-AK</code>).</em></p>
+<hr />
+<h1 id="appendix-b-glossary">Appendix B — Glossary</h1>
+<table>
+<thead>
+<tr>
+<th>Term</th>
+<th>Definition</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Fair value gap (FVG)</strong></td>
+<td>A price range skipped by one-sided participation, left untraded between bar 1 and bar 3 of a displacement sequence</td>
+</tr>
+<tr>
+<td><strong>Imbalance</strong></td>
+<td>The same event described from the order-flow side: one side was overwhelmed</td>
+</tr>
+<tr>
+<td><strong>Displacement</strong></td>
+<td>A fast, one-directional move that is large relative to recent range</td>
+</tr>
+<tr>
+<td><strong>Confirmed</strong></td>
+<td>The candle has closed and the result is locked</td>
+</tr>
+<tr>
+<td><strong>Repaint</strong></td>
+<td>A drawing or signal that changes after it first appeared</td>
+</tr>
+<tr>
+<td><strong>Invalidation</strong></td>
+<td>Price trading back through a zone far enough to use it up, by wick or by body close depending on your setting</td>
+</tr>
+<tr>
+<td><strong>Midpoint</strong></td>
+<td>The 50% level of a zone</td>
+</tr>
+<tr>
+<td><strong>Combined zone</strong></td>
+<td>Two or more overlapping same-direction zones merged into one</td>
+</tr>
+<tr>
+<td><strong>BOS</strong></td>
+<td>Break of Structure — a close through the most recent swing in the established direction</td>
+</tr>
+<tr>
+<td><strong>MSS</strong></td>
+<td>Market Structure Shift — a close through the most recent opposing swing</td>
+</tr>
+<tr>
+<td><strong>Pivot</strong></td>
+<td>A swing high or low confirmed by a required number of bars on each side</td>
+</tr>
+<tr>
+<td><strong>EQH / EQL</strong></td>
+<td>Equal highs / equal lows — a shelf of near-equal pivots where protective orders cluster</td>
+</tr>
+<tr>
+<td><strong>Liquidity sweep</strong></td>
+<td>A run through a level that closes back inside it; a failed breakout</td>
+</tr>
+<tr>
+<td><strong>Lookback</strong></td>
+<td>How many bars back a calculation measures</td>
+</tr>
+<tr>
+<td><strong>Volume split</strong></td>
+<td>How the three-bar volume divided between the upper and lower half of a zone</td>
+</tr>
+<tr>
+<td><strong>Skull Mode</strong></td>
+<td>A display mode that reduces each zone to its midpoint line and faint volume bars</td>
+</tr>
+<tr>
+<td><strong>Multi-Fix</strong></td>
+<td>Detection across up to four chosen timeframes at once, each zone tagged with its source</td>
+</tr>
+<tr>
+<td><strong>Drawing budget</strong></td>
+<td>TradingView's fixed limit of 500 boxes, 500 lines and 500 labels per indicator</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h1 id="course-summary">Course Summary</h1>
+<p>Fair Value Gaps PRO records where participation was one-sided, where protective orders sit, where an attempt on those orders failed, and whether the market has stopped doing what it was doing. It then stays out of your way. The judgement — direction, entry, invalidation, size — is entirely yours, and the tool is built so that nothing in it can pretend otherwise.</p>
+<h2 id="key-takeaways">Key Takeaways</h2>
+<ol>
+<li>A zone is evidence of participation, not a prediction, and not an instruction.</li>
+<li>The middle-bar close and the size filter are what separate this from a generic gap tool.</li>
+<li>Everything meaningful in this indicator requires a <strong>close</strong>.</li>
+<li>MSS says the prior direction stopped; BOS says it is continuing. Only one of those changes your bias.</li>
+<li>Equal levels are preparation, not triggers, because honest pivots arrive late.</li>
+<li>A sweep without a structure shift is one wick with a label on it.</li>
+<li>Timeframe agreement outranks how attractive any single zone looks.</li>
+<li>Invalidation is defined before entry, and size comes last.</li>
+<li>The drawing budget is real: four boxes and two lines per zone, about 125 zones in total.</li>
+<li>The tool holds no opinion on risk. That gap is yours to fill, in writing.</li>
+</ol>
+<h2 id="knowledge-check">Knowledge Check</h2>
+<ol>
+<li>Which single setting most often needs lowering, and in which mode?</li>
+<li>Which elements of the indicator are chart-timeframe only?</li>
+<li>What is the correct reading of a 40% volume balance figure?</li>
+<li>Why does the guide insist that "buy-side sweep" is not a buy instruction?</li>
+<li>What is the one step the indicator cannot help you with at all?</li>
+</ol>
+<h2 id="cross-references">Cross References</h2>
+<table>
+<thead>
+<tr>
+<th>Document</th>
+<th>Document ID</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Cheat Sheet</td>
+<td><code>THECC-DOC-FVGPRO-CS</code></td>
+<td>One-page on-chart legend and defaults</td>
+</tr>
+<tr>
+<td>Quick Start</td>
+<td><code>THECC-DOC-FVGPRO-QS</code></td>
+<td>Installation and first chart in ten minutes</td>
+</tr>
+<tr>
+<td>Instructor Guide</td>
+<td><code>THECC-DOC-FVGPRO-IG</code></td>
+<td>Teaching notes, timings, discussion prompts</td>
+</tr>
+<tr>
+<td>Answer Key</td>
+<td><code>THECC-DOC-FVGPRO-AK</code></td>
+<td>Certification quiz answers</td>
+</tr>
+<tr>
+<td>Workbook</td>
+<td><code>THECC-DOC-FVGPRO-WB</code></td>
+<td>Exercises and journalling templates</td>
+</tr>
+<tr>
+<td>Release Notes</td>
+<td><code>THECC-DOC-FVGPRO-RN</code></td>
+<td>What changed in v2.1</td>
+</tr>
+<tr>
+<td>Academy Documentation Standard</td>
+<td><code>_ACADEMY_DOC_STANDARD_v1.0.md</code></td>
+<td>The standard governing this document</td>
+</tr>
+</tbody>
+</table>
+<p>⚠️ Documents other than the Student Guide and Cheat Sheet are <strong>not yet authored</strong> for this product. The Academy suite is 20 documents per indicator; this release delivers 2.</p>
+<hr />
+<h1 id="document-control">Document Control</h1>
+<h2 id="revision-history">Revision History</h2>
+<table>
+<thead>
+<tr>
+<th>Version</th>
+<th>Date</th>
+<th>Author</th>
+<th>Change</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>v2.1.0</td>
+<td>2026-09-20</td>
+<td>Dale Batise</td>
+<td>First Academy-standard Student Guide for Fair Value Gaps PRO. Covers zones, volume split, timeframe modes, market structure (MSS / BOS), equal highs and lows, liquidity sweeps, the Zone Engine settings tier, alerts, best practices, mistakes, 50 FAQs, troubleshooting, quiz and glossary.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="compatibility">Compatibility</h2>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Indicator</td>
+<td>THECC Fair Value Gaps PRO</td>
+</tr>
+<tr>
+<td>Registry ID</td>
+<td><strong>Pending</strong> — see the warning in the front matter</td>
+</tr>
+<tr>
+<td>Indicator versions</td>
+<td>v2.1.x</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>TradingView · Pine Script v6</td>
+</tr>
+<tr>
+<td>Academy Doc Standard</td>
+<td>v1.0</td>
+</tr>
+<tr>
+<td>Dependencies</td>
+<td>None — standalone</td>
+</tr>
+<tr>
+<td>Companion products</td>
+<td>Precision Execution Engine (THECC-0002) · Support &amp; Resistance Matrix (THECC-0024)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="certification-status">Certification status</h2>
+<p><strong>Content Complete — Certification Pending.</strong> The v2.1 build has not been green-checked on TradingView at the time of writing. Per Academy Documentation Standard v1.0 §2a, <code>Production Certified</code> may not be stamped on this material until the build passes the TradingView compile green-check and the owner signs off.</p>
+<h2 id="copyright-and-disclaimer">Copyright and disclaimer</h2>
+<p>© THE CONSISTENCY COLLECTIVE. All THECC Academy materials and indicators are the property of THE CONSISTENCY COLLECTIVE and distributed under the THECC licence.</p>
+<p><strong>Educational material only.</strong> Nothing in this document is financial advice, a signal service, a solicitation, or a claim about future results. Trading futures and other leveraged instruments carries substantial risk of loss. You are responsible for your own decisions, your own risk limits, and your own compliance with the rules of your broker or prop firm.</p>
+<h2 id="footer-convention">Footer convention</h2>
+<p>Running footer on rendered formats:
+<code>THECC Institutional Trader Academy™ · Fair Value Gaps PRO Student Guide v2.1.0 · © THE CONSISTENCY COLLECTIVE · Page N of M</code></p>
+<hr />
+<p><em>© THE CONSISTENCY COLLECTIVE — THECC Institutional Trader Academy™ · Consistency Creates Freedom. · Academy Documentation Standard v1.0.</em></p>
+<div class='foot'>THECC Institutional Trader Academy™ · THECC Fair Value Gaps PRO — Student Guide v2.1.0 · THECC-DOC-FVGPRO-SG · © THE CONSISTENCY COLLECTIVE · Academy Documentation Standard v1.0</div>
+</body></html>

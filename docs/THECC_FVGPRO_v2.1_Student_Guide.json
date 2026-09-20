@@ -1,0 +1,183 @@
+{
+  "document": {
+    "document_id": "THECC-DOC-FVGPRO-SG",
+    "document_type": "Student Guide (Master Curriculum)",
+    "title": "THECC Fair Value Gaps PRO — Student Guide",
+    "document_version": "2.1.0",
+    "build": "2.1.0+2026-09-20",
+    "release_date": "2026-09-20",
+    "last_updated": "2026-09-20",
+    "status": "Content Complete — Certification Pending",
+    "academy_doc_standard": "v1.0",
+    "instructor": "Dale Batise",
+    "edition": "Student / Pro",
+    "reading_level_target": "Grade 11–12",
+    "copyright": "© THE CONSISTENCY COLLECTIVE"
+  },
+  "indicator": {
+    "name": "THECC Fair Value Gaps PRO",
+    "registry_id": "PENDING",
+    "registry_note": "No permanent THECC-NNNN ID assigned. THECC_INDICATOR_REGISTRY.json carries an open question under THECC-0008 (FVG Return Filter): FVGBPR sits in the same folder and may warrant its own ID. Owner decision required before publication.",
+    "current_version": "2.1",
+    "pine_version": 6,
+    "platform": "TradingView",
+    "role": "MARKET MAP / CONTEXT — fair value gaps with volume profiling, market structure, equal highs/lows and liquidity sweeps. Issues no trade signals.",
+    "compatible_indicator_versions": "FVG PRO v2.1.x",
+    "dependencies": [],
+    "companions": [
+      "THECC-0002 (Precision Execution Engine)",
+      "THECC-0024 (Support & Resistance Matrix)"
+    ],
+    "source_build": "pine/thecc-fvg-pro-v2.pine (git branch claude/trusting-carson-ggyul4)",
+    "compile_status": "Not green-checked at time of writing",
+    "certification": {
+      "tradingview_compile_green_check": false,
+      "owner_signoff": false
+    }
+  },
+  "components": [
+    {
+      "name": "Fair value gap zones",
+      "timeframe_scope": "Auto / Fix / Multi-Fix",
+      "repaints": false,
+      "detection": "3-bar gap; middle bar must close through the gap edge; size test gap x sensitivity > ATR, or volume filter; bar-to-bar jump <= ATR unless Allow Gaps is on"
+    },
+    {
+      "name": "Volume split and balance percentage",
+      "timeframe_scope": "same as zone",
+      "repaints": false,
+      "detection": "3-bar volume split between zone halves; percentage = smaller / larger x 100"
+    },
+    {
+      "name": "Market structure (MSS / BOS)",
+      "timeframe_scope": "Chart timeframe only",
+      "repaints": false,
+      "detection": "Pivot zig-zag, pivot length 5 default, right bars 1; MSS = close beyond most recent opposing swing; BOS = close beyond most recent swing in the established direction"
+    },
+    {
+      "name": "Equal highs / equal lows",
+      "timeframe_scope": "Chart timeframe only",
+      "repaints": false,
+      "detection": "Two consecutive confirmed pivots within tolerance percent; confirmed eqLen bars after the second pivot"
+    },
+    {
+      "name": "Liquidity sweeps",
+      "timeframe_scope": "Chart timeframe only",
+      "repaints": "Label evaluated on the live bar; only a closed bar is evidence",
+      "detection": "High > highest(high[1], lookback) and close < that high and close < open; mirrored for sell-side"
+    }
+  ],
+  "alerts": {
+    "named_conditions": [
+      "MSS Bullish",
+      "MSS Bearish",
+      "BOS Bullish",
+      "BOS Bearish",
+      "MSS (any)",
+      "BOS (any)",
+      "MSS or BOS (any)",
+      "Equal Highs (EQH)",
+      "Equal Lows (EQL)",
+      "Buy-side liquidity sweep",
+      "Sell-side liquidity sweep",
+      "Liquidity sweep (any)",
+      "New FVG (Auto/Fix)",
+      "New FVG TF#1",
+      "New FVG TF#2",
+      "New FVG TF#3",
+      "New FVG TF#4"
+    ],
+    "dynamic": {
+      "mechanism": "Any alert() function call",
+      "frequency": "once per bar",
+      "message_format": "<direction> <event> | <ticker> | <timeframe> | level <price> | close <price>",
+      "optional_prefix": true
+    },
+    "defaults_on": [
+      "MSS Bullish",
+      "MSS Bearish",
+      "BOS Bullish",
+      "BOS Bearish"
+    ],
+    "defaults_off": [
+      "Equal Highs (EQH)",
+      "Equal Lows (EQL)",
+      "Buy-side liquidity sweep",
+      "Sell-side liquidity sweep"
+    ],
+    "bar_close_gating_default": true
+  },
+  "drawing_budget": {
+    "boxes": 500,
+    "lines": 500,
+    "labels": 500,
+    "cost_per_zone": {
+      "boxes": 4,
+      "lines": 2
+    },
+    "max_zones_total": 125,
+    "zones_kept_guidance": {
+      "1_timeframe": "100-125",
+      "2": 55,
+      "3": 35,
+      "4": 30,
+      "5": 25
+    }
+  },
+  "terminology_lock": {
+    "confirmed": "The candle has closed and the result is locked",
+    "repaint": "A drawing or signal that changes after it first appeared",
+    "sensitivity": "A permissiveness multiplier: gap x sensitivity > ATR. Extreme 6.0 admits most zones, Low 1.0 fewest"
+  },
+  "branding": {
+    "third_party_names_in_student_docs": false,
+    "note": "Source-code attribution (MPL-2.0) remains in the .pine comments only, per Academy Documentation Standard v1.0 section 6a"
+  },
+  "formats_delivered": {
+    "md": true,
+    "html": true,
+    "google_doc": true,
+    "slide_outline_md": true,
+    "video_outline_md": true,
+    "metadata_json": true,
+    "docx": false,
+    "pdf": false,
+    "note": "DOCX and PDF not rendered in this session: the authoring container's LibreOffice could not load documents. Render via _render/ or export from the uploaded Google Doc."
+  },
+  "suite_status": {
+    "documents_required": 20,
+    "documents_delivered": 2,
+    "delivered": [
+      "THECC-DOC-FVGPRO-SG",
+      "THECC-DOC-FVGPRO-CS"
+    ],
+    "outstanding": [
+      "IG",
+      "DG",
+      "QS",
+      "FAQ",
+      "TS",
+      "RN",
+      "CL",
+      "KB",
+      "VS",
+      "PPT",
+      "EX",
+      "AK",
+      "WB",
+      "PE",
+      "LM",
+      "MC",
+      "RM",
+      "IX"
+    ]
+  },
+  "revision_history": [
+    {
+      "version": "2.1.0",
+      "date": "2026-09-20",
+      "author": "Dale Batise",
+      "change": "First Academy-standard Student Guide and Cheat Sheet for Fair Value Gaps PRO v2.1 (adds liquidity sweeps, market structure, equal highs/lows and the Zone Engine settings tier)."
+    }
+  ]
+}
