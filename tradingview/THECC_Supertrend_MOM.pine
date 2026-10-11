@@ -51,6 +51,14 @@ string t_logoPos  = input.string('Bottom Center', 'Logo position', options = ['T
 color  t_brandCol = input.color(#D4AF37, 'Brand accent color', group = g_brand)
 int    t_logoTransp = input.int(70, 'Logo transparency', minval = 0, maxval = 100, group = g_brand)
 
+string g_sess     = 'THECC Session Stats (Premarket vs NY)'
+bool   t_showSess = input.bool(true, 'Show session stats table', group = g_sess)
+int    t_sessN    = input.int(100, 'Last N trades per session', minval = 10, maxval = 500, group = g_sess, tooltip = 'Each column (Premarket / NY Regular) shows its own last N closed trades.')
+string t_rthSess  = input.session('0930-1630', 'NY regular hours (ET)', group = g_sess, tooltip = 'Trades entered inside this window (New York time) count as NY Regular. Everything else counts as Premarket / overnight.')
+int    t_qty      = input.int(1, 'Contracts', minval = 1, group = g_sess)
+float  t_cost     = input.float(5.0, 'Cost per contract ($, round turn)', minval = 0.0, step = 0.5, group = g_sess, tooltip = 'Fixed commission + fees per contract for the full round turn, subtracted from every trade.')
+string t_sessPos  = input.string('Bottom Left', 'Table position', options = ['Top Left', 'Top Center', 'Top Right', 'Middle Left', 'Middle Center', 'Middle Right', 'Bottom Left', 'Bottom Center', 'Bottom Right'], group = g_sess)
+
 
 // ════════════════════════════════════════════════════════════════════════════════
 // SUPERTREND ERROR ADAPTIVE CLOUD
@@ -834,6 +842,7 @@ if buySig or sellSig
     t_pendDir := 0
 
 // ── Trade state ──
+bool t_inRth = not na(time(timeframe.period, t_rthSess, 'America/New_York'))
 var int   t_dir     = 0
 var float t_entry   = na
 var float t_sl      = na
@@ -843,7 +852,13 @@ var int   t_entBar  = na
 var box   t_tpBox   = na
 var box   t_slBox   = na
 var line  t_entLn   = na
+var bool  t_entRth  = false
 var array<float> t_results = array.new_float(0)   // closed trade results in R
+// Session stats: net $ per trade (after costs) and net R per trade, last N per session
+var array<float> t_preUsd = array.new_float(0)
+var array<float> t_preR   = array.new_float(0)
+var array<float> t_rthUsd = array.new_float(0)
+var array<float> t_rthR   = array.new_float(0)
 
 f_closeDraw(int x) =>
     if not na(t_tpBox)
@@ -852,6 +867,19 @@ f_closeDraw(int x) =>
         box.set_right(t_slBox, x)
     if not na(t_entLn)
         line.set_x2(t_entLn, x)
+
+// Records a closed trade (gross R) into its entry session, net of the fixed cost per contract
+f_record(float r) =>
+    float riskUsd = t_risk * syminfo.pointvalue * t_qty
+    float usd     = r * riskUsd - t_cost * t_qty
+    float rNet    = riskUsd > 0 ? usd / riskUsd : 0.0
+    array<float> aUsd = t_entRth ? t_rthUsd : t_preUsd
+    array<float> aR   = t_entRth ? t_rthR   : t_preR
+    array.push(aUsd, usd)
+    array.push(aR, rNet)
+    while array.size(aUsd) > t_sessN
+        array.shift(aUsd)
+        array.shift(aR)
 
 f_resultLbl(float px, float r, bool above) =>
     if t_showRes
@@ -869,6 +897,7 @@ if t_dir != 0 and t_confirmed and bar_index > t_entBar
         float exitPx = onClose ? close : slHit ? t_sl : t_tp
         float r = (exitPx - t_entry) * t_dir / t_risk
         array.push(t_results, r)
+        f_record(r)
         f_closeDraw(bar_index)
         f_resultLbl(exitPx, r, t_dir == 1 ? tpHit : slHit)
         t_dir := 0
@@ -879,6 +908,7 @@ if t_dir != 0 and t_confirmed and bar_index > t_entBar
 if t_dir != 0 and t_closeOpp and ((buySig and t_dir == -1) or (sellSig and t_dir == 1))
     float r = (close - t_entry) * t_dir / t_risk
     array.push(t_results, r)
+    f_record(r)
     f_closeDraw(bar_index)
     f_resultLbl(close, r, t_dir == 1)
     t_dir := 0
@@ -893,6 +923,7 @@ if newBuy or newSell
     t_risk   := math.abs(t_entry - t_sl)
     t_tp     := t_entry + t_dir * t_risk * t_rr
     t_entBar := bar_index
+    t_entRth := t_inRth
     t_tpBox  := na
     t_slBox  := na
     t_entLn  := na
@@ -969,6 +1000,101 @@ if t_showPanel and barstate.islast
     f_prow(12, 'Net Result', n > 0 ? (netR >= 0 ? '+' : '') + str.tostring(netR, '0.00') + 'R' : 'n/a', netR >= 0 ? t_green : t_red)
     f_prow(13, 'Open Trade', na(openR) ? 'none' : (t_dir == 1 ? 'LONG ' : 'SHORT ') + (openR >= 0 ? '+' : '') + str.tostring(openR, '0.00') + 'R', na(openR) ? color.white : openR >= 0 ? t_green : t_red)
     table.cell(t_panel, 0, 14, 'THECC AI Coach • Educational only. Not financial advice.', text_color = color.new(t_brandCol, 20), bgcolor = t_bg, text_halign = text.align_center, text_size = size.tiny)
+
+
+// ── THECC session stats table: last N trades, Premarket vs NY Regular (net of costs) ──
+var table t_sess = t_showSess ? table.new(f_pos(t_sessPos), 3, 15, bgcolor = color.new(#131722, 10), frame_color = color.new(t_brandCol, 30), frame_width = 1, border_color = color.new(color.gray, 60), border_width = 1, force_overlay = true) : na
+
+// [trades, wins, win %, net R, avg R, profit factor, net $, avg $, max drawdown $, max consecutive losses, total costs $]
+f_sessStats(array<float> aUsd, array<float> aR) =>
+    int   n = array.size(aUsd)
+    int   wins = 0
+    float netR = 0.0
+    float netUsd = 0.0
+    float gWin = 0.0
+    float gLoss = 0.0
+    float eq = 0.0
+    float peak = 0.0
+    float maxDD = 0.0
+    int   streak = 0
+    int   maxCL = 0
+    if n > 0
+        for i = 0 to n - 1
+            float u = array.get(aUsd, i)
+            netR += array.get(aR, i)
+            netUsd += u
+            if u > 0
+                wins += 1
+                gWin += u
+                streak := 0
+            else
+                gLoss -= u
+                streak += 1
+                maxCL := math.max(maxCL, streak)
+            eq += u
+            peak := math.max(peak, eq)
+            maxDD := math.max(maxDD, peak - eq)
+    float wr = n > 0 ? wins * 100.0 / n : na
+    float avgR = n > 0 ? netR / n : na
+    float pf = gLoss > 0 ? gWin / gLoss : na
+    float avgUsd = n > 0 ? netUsd / n : na
+    [n, wins, wr, netR, avgR, pf, netUsd, avgUsd, maxDD, maxCL, t_cost * t_qty * n]
+
+f_usd(float v) =>
+    na(v) ? 'n/a' : (v < 0 ? '-$' : '$') + str.tostring(math.abs(v), '#,##0')
+
+f_scell(int c, int r, string v, color vc) =>
+    table.cell(t_sess, c, r, v, text_color = vc, text_halign = c == 0 ? text.align_left : text.align_right, text_size = getSize(t_panelSize))
+
+if t_showSess and barstate.isfirst
+    table.merge_cells(t_sess, 0, 0, 2, 0)
+    table.merge_cells(t_sess, 0, 14, 2, 14)
+
+if t_showSess and barstate.islast
+    [pN, pW, pWr, pR, pAvgR, pPf, pUsd, pAvgUsd, pDD, pCL, pCost] = f_sessStats(t_preUsd, t_preR)
+    [rN, rW, rWr, rR, rAvgR, rPf, rUsd, rAvgUsd, rDD, rCL, rCost] = f_sessStats(t_rthUsd, t_rthR)
+    color hdr = color.new(#3B5B92, 0)
+    table.cell(t_sess, 0, 0, 'THECC  •  LAST ' + str.tostring(t_sessN) + ' TRADES PER SESSION', text_color = t_brandCol, bgcolor = t_bg, text_halign = text.align_center, text_size = getSize(t_panelSize))
+    table.cell(t_sess, 0, 1, 'Stat', text_color = color.white, bgcolor = hdr, text_size = getSize(t_panelSize))
+    table.cell(t_sess, 1, 1, 'Premarket', text_color = color.white, bgcolor = hdr, text_size = getSize(t_panelSize))
+    table.cell(t_sess, 2, 1, 'NY Regular', text_color = color.white, bgcolor = hdr, text_size = getSize(t_panelSize))
+    f_scell(0, 2, 'Trades', color.white)
+    f_scell(1, 2, str.tostring(pN), color.white)
+    f_scell(2, 2, str.tostring(rN), color.white)
+    f_scell(0, 3, 'Wins / Losses', color.white)
+    f_scell(1, 3, str.tostring(pW) + ' / ' + str.tostring(pN - pW), color.white)
+    f_scell(2, 3, str.tostring(rW) + ' / ' + str.tostring(rN - rW), color.white)
+    f_scell(0, 4, 'Win Rate', color.white)
+    f_scell(1, 4, na(pWr) ? 'n/a' : str.tostring(pWr, '0.0') + '%', color.white)
+    f_scell(2, 4, na(rWr) ? 'n/a' : str.tostring(rWr, '0.0') + '%', color.white)
+    f_scell(0, 5, 'Net R (after cost)', color.white)
+    f_scell(1, 5, (pR >= 0 ? '+' : '') + str.tostring(pR, '0.0') + 'R', pR >= 0 ? t_green : t_red)
+    f_scell(2, 5, (rR >= 0 ? '+' : '') + str.tostring(rR, '0.0') + 'R', rR >= 0 ? t_green : t_red)
+    f_scell(0, 6, 'Avg R / trade', color.white)
+    f_scell(1, 6, na(pAvgR) ? 'n/a' : str.tostring(pAvgR, '0.00') + 'R', color.white)
+    f_scell(2, 6, na(rAvgR) ? 'n/a' : str.tostring(rAvgR, '0.00') + 'R', color.white)
+    f_scell(0, 7, 'Profit Factor', color.white)
+    f_scell(1, 7, na(pPf) ? 'n/a' : str.tostring(pPf, '0.00'), color.white)
+    f_scell(2, 7, na(rPf) ? 'n/a' : str.tostring(rPf, '0.00'), color.white)
+    f_scell(0, 8, 'Net P/L (' + str.tostring(t_qty) + ' ct)', color.white)
+    f_scell(1, 8, f_usd(pUsd), pUsd >= 0 ? t_green : t_red)
+    f_scell(2, 8, f_usd(rUsd), rUsd >= 0 ? t_green : t_red)
+    f_scell(0, 9, 'Avg P/L / trade', color.white)
+    f_scell(1, 9, f_usd(pAvgUsd), color.white)
+    f_scell(2, 9, f_usd(rAvgUsd), color.white)
+    f_scell(0, 10, 'Max Drawdown', color.white)
+    f_scell(1, 10, f_usd(-pDD), pDD > 0 ? t_red : color.white)
+    f_scell(2, 10, f_usd(-rDD), rDD > 0 ? t_red : color.white)
+    f_scell(0, 11, 'Max Losing Streak', color.white)
+    f_scell(1, 11, str.tostring(pCL), color.white)
+    f_scell(2, 11, str.tostring(rCL), color.white)
+    f_scell(0, 12, 'Costs Paid', color.white)
+    f_scell(1, 12, f_usd(pCost), color.white)
+    f_scell(2, 12, f_usd(rCost), color.white)
+    f_scell(0, 13, 'Session (ET)', color.white)
+    f_scell(1, 13, 'outside RTH', color.gray)
+    f_scell(2, 13, t_rthSess, color.gray)
+    table.cell(t_sess, 0, 14, 'Cost $' + str.tostring(t_cost, '0.00') + '/ct round turn • ' + str.tostring(syminfo.pointvalue) + ' $/pt • Educational only', text_color = color.new(t_brandCol, 20), bgcolor = t_bg, text_halign = text.align_center, text_size = size.tiny)
 
 
 // ════════════════════════════════════════════════════════════════════════════════

@@ -33,6 +33,18 @@ Each trade gets a teal target zone, a red stop zone and an entry line. The brack
 - the stop and R:R settings
 - closed trades, win rate, net R and the open trade
 
+## Session stats table (last 100 trades)
+A third table (bottom left by default) splits the last **100** closed trades into **Premarket** (entries outside NY regular hours) and **NY Regular** (entries 9:30am–4:30pm ET). Each column shows:
+- trades and wins / losses
+- win rate
+- net R and average R per trade
+- profit factor
+- net and average P/L in $
+- max drawdown and longest losing streak
+- total costs paid
+
+Every trade has a **fixed cost per contract** (default **$5.00** round turn, **1 contract**) subtracted. Dollar values use the symbol's point value ($20/pt NQ, $50/pt ES). You can change N, the session window, the contract count and the cost under *THECC Session Stats*.
+
 Alerts: THECC Buy, THECC Sell, Take Profit Hit, Stop Loss Hit, plus all of the original MOM alerts.
 
 *THECC AI Coach. For education only, not financial advice.*
