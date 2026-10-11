@@ -1,0 +1,438 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © THECC — THECC AI Coach
+//
+// THECC OC + Spread RSI Strategy
+// Combines "OC Buy/Sell Signals" (open/close body breakout) with the "Spread RSI" filter into one indicator.
+// Defaults follow the THECC strategy walkthrough:
+//   OC:         Average body length 39, Min body vs average 2.0x, Min volume vs average 0.5x
+//   Spread RSI: Upper threshold 57 (red line), Lower threshold 38 (green line)
+//   BUY:  OC BUY label + Spread RSI above the red line + bullish confirmation candle
+//   SELL: OC SELL label + Spread RSI below the green line + bearish confirmation candle
+//   SL at the signal candle's wick (the red SL line), TP at ~1.8R
+// The Spread RSI line is drawn in this pane; signals, trade lines, info box and logo are drawn on the price chart.
+// Educational use only. Not financial advice.
+
+//@version=6
+indicator("THECC OC + Spread RSI Strategy", shorttitle="THECC OC+RSI", overlay=false, max_lines_count=100, max_labels_count=100, max_boxes_count=100)
+
+// ── Inputs ────────────────────────────────────────────────
+nonRepaint = input.bool(true, "Non-repaint (confirm signals on bar close)", tooltip="ON: signals appear only after the bar closes and never disappear or move. OFF: signals can appear while the bar is still forming and may vanish or flip before the bar closes (repainting). Alerts and the info box statistics are more reliable with this ON.")
+
+grpSig    = "OC Signals"
+bodyLen   = input.int(39, "Average body length", minval=1, group=grpSig, tooltip="Number of bars used to calculate the average candle body (absolute distance between open and close). The signal candle's body is compared against this average. The same length is used for the average volume. THECC default: 39.")
+bodyMult  = input.float(2.0, "Min body vs average (x)", minval=0.0, step=0.5, group=grpSig, tooltip="Minimum size of the signal candle's body as a multiple of the average body. Higher values give fewer, stronger signals. Set to 0 to remove the size filter. THECC default: 2.0.")
+volMult   = input.float(0.5, "Min volume vs average (x)", minval=0.0, step=0.5, group=grpSig, tooltip="Minimum volume of the signal candle as a multiple of its average volume. Set to 0 to turn the volume filter off. Needs volume data on the symbol: if none is available, no signals appear while this is above 0. THECC default: 0.5.")
+alternate = input.bool(true, "Alternate signals", group=grpSig, tooltip="ON: OC signals alternate BUY, SELL, BUY and so on (same as the original OC Buy/Sell Signals indicator). OFF: every qualifying candle fires an OC signal.")
+showOcRaw = input.bool(true, "Show raw OC signals", group=grpSig, tooltip="Shows a small triangle on every OC BUY/SELL signal, including ones that never got Spread RSI / candle confirmation. The full BUY/SELL labels are only shown for confirmed strategy entries.")
+
+grpRsi    = "Spread RSI Filter"
+useRsi    = input.bool(true, "Use Spread RSI filter", group=grpRsi, tooltip="ON: a BUY needs the Spread RSI line above the upper (red) line and a SELL needs it below the lower (green) line. OFF: the RSI filter is ignored.")
+symbol_2  = input.symbol("AMEX:SPY", "Comparison symbol", group=grpRsi, tooltip="The spread is the chart symbol's close divided by this symbol's close. The RSI is calculated on that ratio.")
+rsiLen    = input.int(2, "RSI length", minval=2, maxval=100, group=grpRsi)
+rsiUpper  = input.int(57, "RSI upper threshold (red line)", minval=50, maxval=100, group=grpRsi, tooltip="BUY filter: the Spread RSI line must be above this level. THECC default: 57.")
+rsiLower  = input.int(38, "RSI lower threshold (green line)", minval=0, maxval=50, group=grpRsi, tooltip="SELL filter: the Spread RSI line must be below this level. THECC default: 38.")
+rsiCol    = input.color(color.rgb(71, 36, 201), "Spread RSI line color", group=grpRsi)
+
+grpConf   = "Candle Confirmation"
+confMode  = input.string("Next candle", "Confirmation candle", options=["Next candle", "Signal candle"], group=grpConf, tooltip="Next candle: after an OC signal, wait for a bullish (BUY) or bearish (SELL) candle to close, with the Spread RSI filter passing on that candle. Entry is that candle's close. Signal candle: the OC signal candle itself is the confirmation (it is always bullish for BUY and bearish for SELL), so entry is on the OC candle's close.")
+confWin   = input.int(1, "Confirmation window (bars)", minval=1, maxval=10, group=grpConf, tooltip="Used only in Next candle mode. How many bars after the OC signal the confirmation candle may appear. The setup is cancelled after this, or when an opposite OC signal fires.")
+
+grpRisk   = "Stop Loss / Take Profit"
+useRisk   = input.bool(true, "Enable SL/TP", group=grpRisk, tooltip="ON: the stop loss is placed using the Stop loss mode, Entry/SL/TP lines are drawn for the current open trade, and trades close when the SL or TP is hit. OFF: pure stop-and-reverse. No lines are drawn and trades only close on the opposite entry.")
+exitMode  = input.string("Wick", "Exit trigger", options=["Wick", "Close"], group=grpRisk, tooltip="Wick: the SL or TP is hit as soon as the bar's high or low touches the level, and the trade exits at that exact price. Close: the SL or TP is hit only when a bar closes at or beyond the level, and the trade exits at that bar's close.")
+slMode    = input.string("Candle wick", "Stop loss mode", options=["ATR", "Candle wick", "Candle body", "None"], group=grpRisk, tooltip="ATR: entry +/- ATR x the stop loss multiple. Candle wick: the OC signal candle's low for a BUY and high for a SELL (the THECC red SL line). Candle body: the OC signal candle's open. None: no stop loss. THECC default: Candle wick.")
+tpMode    = input.string("SL multiple", "Take profit mode", options=["ATR target", "SL multiple", "Opposite signal"], group=grpRisk, tooltip="ATR target: entry +/- ATR x the take profit (x ATR) multiple. SL multiple: entry +/- the stop distance x the take profit (x SL) multiple (risk-to-reward). Opposite signal: no fixed take profit, the trade closes on the opposite entry or the stop loss.")
+atrLen    = input.int(14, "ATR length", minval=1, group=grpRisk)
+slMult    = input.float(1.5, "Stop loss (x ATR)", minval=0.1, step=0.1, group=grpRisk, tooltip="Used only when Stop loss mode is ATR.")
+tpMult    = input.float(3.0, "Take profit (x ATR)", minval=0.1, step=0.1, group=grpRisk, tooltip="Used only when Take profit mode is ATR target.")
+tpRMult   = input.float(1.8, "Take profit (x SL) / R:R", minval=0.1, step=0.1, group=grpRisk, tooltip="Used only when Take profit mode is SL multiple. Reward as a multiple of risk. THECC default: 1.8 (the walkthrough trades used 1:1.72 to 1:1.84).")
+
+grpLB     = "Lookback P/L"
+lookback  = input.int(20, "Lookback (last N closed trades)", minval=1, group=grpLB, tooltip="Number of most recent closed trades included in the info box statistics.")
+showTable = input.bool(true, "Show info box", group=grpLB)
+tablePos  = input.string("Top Right", "Info box position", options=["Top Left", "Top Center", "Top Right", "Middle Left", "Middle Center", "Middle Right", "Bottom Left", "Bottom Center", "Bottom Right"], group=grpLB)
+tableSize = input.string("Small", "Info box size", options=["Tiny", "Small", "Normal", "Large", "Huge"], group=grpLB)
+
+grpBrand  = "THECC Branding"
+showLogo  = input.bool(true, "Show THECC logo watermark", group=grpBrand)
+logoPos   = input.string("Bottom Center", "Logo position", options=["Top Left", "Top Center", "Top Right", "Middle Left", "Middle Center", "Middle Right", "Bottom Left", "Bottom Center", "Bottom Right"], group=grpBrand)
+logoSize  = input.string("Huge", "Logo size", options=["Tiny", "Small", "Normal", "Large", "Huge"], group=grpBrand)
+brandCol  = input.color(#D4AF37, "Brand accent color", group=grpBrand)
+logoTransp = input.int(70, "Logo transparency", minval=0, maxval=100, group=grpBrand)
+
+grpDisp   = "Display"
+showLabels = input.bool(true, "Show BUY/SELL labels", group=grpDisp)
+lblSize   = input.string("Small", "BUY/SELL label size", options=["Tiny", "Small", "Normal", "Large", "Huge"], group=grpDisp)
+buyCol    = input.color(#4CAF50, "Buy color", group=grpDisp)
+sellCol   = input.color(#F23645, "Sell color", group=grpDisp)
+showTradeLines = input.bool(true, "Show trade lines", group=grpDisp)
+entryCol  = input.color(#2962FF, "Entry line color", group=grpDisp)
+slCol     = input.color(#F23645, "SL line color", group=grpDisp)
+tpCol     = input.color(#4CAF50, "TP line color", group=grpDisp)
+showTradeLbl = input.bool(true, "Show trade labels", group=grpDisp)
+showX     = input.bool(true, "Show exit X", group=grpDisp, tooltip="ON: when price hits the SL or TP, the lines and shading stop at the exit bar and an X marks the exit price. OFF: they disappear as soon as the SL or TP is hit.")
+xCol      = input.color(#2962FF, "Exit X color", group=grpDisp)
+showZone  = input.bool(true, "Show trade zone shading", group=grpDisp)
+slZoneCol = input.color(color.new(#F23645, 85), "SL zone color", group=grpDisp)
+tpZoneCol = input.color(color.new(#4CAF50, 85), "TP zone color", group=grpDisp)
+lineW     = input.int(1, "Line width", minval=1, maxval=4, group=grpDisp)
+
+tpAtr    = tpMode == "ATR target"
+tpRisk   = tpMode == "SL multiple"
+hasSl    = slMode != "None"
+hasTp    = tpMode != "Opposite signal" and not (tpMode == "SL multiple" and slMode == "None")
+riskOn   = useRisk and (hasSl or hasTp)
+slAtr    = slMode == "ATR"
+slWick   = slMode == "Candle wick"
+exitOnClose = exitMode == "Close"
+confNext = confMode == "Next candle"
+
+posOf(string p) =>
+    switch p
+        "Top Left"      => position.top_left
+        "Top Center"    => position.top_center
+        "Middle Left"   => position.middle_left
+        "Middle Center" => position.middle_center
+        "Middle Right"  => position.middle_right
+        "Bottom Left"   => position.bottom_left
+        "Bottom Center" => position.bottom_center
+        "Bottom Right"  => position.bottom_right
+        => position.top_right
+
+sizeOf(string s) =>
+    switch s
+        "Tiny"   => size.tiny
+        "Normal" => size.normal
+        "Large"  => size.large
+        "Huge"   => size.huge
+        => size.small
+
+tPos  = posOf(tablePos)
+tSize = sizeOf(tableSize)
+
+// ── Spread RSI ────────────────────────────────────────────
+float sym2Close = request.security(symbol_2, timeframe.period, close, lookahead=barmerge.lookahead_off)
+float spread    = sym2Close != 0 ? close / sym2Close : na
+float rsiSpread = ta.rsi(spread, rsiLen)
+bool rsiLongOk  = not useRsi or rsiSpread > rsiUpper
+bool rsiShortOk = not useRsi or rsiSpread < rsiLower
+
+plot(rsiSpread, "Spread RSI", color=rsiCol, linewidth=3)
+hline(rsiLower, "RSI Lower Threshold (green)", color=color.green, linewidth=2)
+hline(rsiUpper, "RSI Upper Threshold (red)",   color=color.red,   linewidth=2)
+
+// ── OC open/close-only logic ──────────────────────────────
+bodyHi  = math.max(open, close)
+bodyLo  = math.min(open, close)
+body    = math.abs(close - open)
+avgBody = ta.sma(body, bodyLen)
+avgVol  = ta.sma(volume, bodyLen)
+volOk   = volMult <= 0 or volume >= avgVol * volMult
+atr     = ta.atr(atrLen)
+
+// Bullish candle closing above the prior body, with a body at least the required size
+bullBreak = close > open and close > bodyHi[1] and body >= avgBody * bodyMult and volOk
+// Bearish candle closing below the prior body, with a body at least the required size
+bearBreak = close < open and close < bodyLo[1] and body >= avgBody * bodyMult and volOk
+
+bool confirmed = not nonRepaint or barstate.isconfirmed
+var int ocDir = 0
+ocBuy  = confirmed and bullBreak and (not alternate or ocDir != 1)
+ocSell = confirmed and bearBreak and (not alternate or ocDir != -1)
+if ocBuy
+    ocDir := 1
+else if ocSell
+    ocDir := -1
+
+// ── Strategy entries (OC signal + Spread RSI + confirmation candle) ──
+var int   pendDir  = 0      // 1 = BUY setup waiting for confirmation, -1 = SELL setup
+var int   pendBar  = na
+var float pendWick = na     // signal candle low (BUY) / high (SELL)
+var float pendOpen = na     // signal candle open
+
+bool  buy  = false
+bool  sell = false
+float sigWick = na
+float sigOpen = na
+
+if confNext
+    if confirmed and pendDir != 0 and bar_index > pendBar and bar_index - pendBar <= confWin
+        if pendDir == 1 and close > open and rsiLongOk and close > pendWick
+            buy := true
+        else if pendDir == -1 and close < open and rsiShortOk and close < pendWick
+            sell := true
+        if buy or sell
+            sigWick := pendWick
+            sigOpen := pendOpen
+            pendDir := 0
+    if pendDir != 0 and bar_index - pendBar >= confWin
+        pendDir := 0
+    if ocBuy or ocSell
+        pendDir  := ocBuy ? 1 : -1
+        pendBar  := bar_index
+        pendWick := ocBuy ? low : high
+        pendOpen := open
+else
+    buy  := ocBuy and rsiLongOk
+    sell := ocSell and rsiShortOk
+    sigWick := buy ? low : sell ? high : na
+    sigOpen := open
+
+// ── Trade state ───────────────────────────────────────────
+var int dir = 0
+var bool inTrade = false
+var float entryPx = na
+var float slPx = na
+var float tpPx = na
+var array<float> pnls = array.new_float(0)
+var array<int> reasons = array.new_int(0)   // 1 = TP, -1 = SL, 0 = reversal
+var array<float> gaps = array.new_float(0)   // milliseconds between consecutive entries
+var int lastSigTime = na
+var float slAtrX = na
+
+var line entryLn = na
+var line slLn = na
+var line tpLn = na
+var label entryLbl = na
+var label slLbl = na
+var label tpLbl = na
+var label xLbl = na
+var box slBox = na
+var box tpBox = na
+
+recordTrade(float pnl, int reason) =>
+    array.push(pnls, pnl)
+    array.push(reasons, reason)
+    while array.size(pnls) > lookback
+        array.shift(pnls)
+        array.shift(reasons)
+
+clearLines() =>
+    line.delete(entryLn)
+    line.delete(slLn)
+    line.delete(tpLn)
+    label.delete(entryLbl)
+    label.delete(slLbl)
+    label.delete(tpLbl)
+    label.delete(xLbl)
+    box.delete(slBox)
+    box.delete(tpBox)
+
+// ── 1) SL / TP exit check on existing trade (before any new entry) ──
+// If SL and TP are both touched on the same bar, SL is assumed first.
+bool slHit = false
+bool tpHit = false
+if useRisk and inTrade and confirmed
+    slHit := hasSl and (exitOnClose ? (dir == 1 ? close <= slPx : close >= slPx) : (dir == 1 ? low <= slPx : high >= slPx))
+    tpHit := hasTp and not slHit and (exitOnClose ? (dir == 1 ? close >= tpPx : close <= tpPx) : (dir == 1 ? high >= tpPx : low <= tpPx))
+    if slHit or tpHit
+        float exitPx = exitOnClose ? close : (slHit ? slPx : tpPx)
+        float exitPnl = dir == 1 ? (exitPx - entryPx) / entryPx * 100 : (entryPx - exitPx) / entryPx * 100
+        recordTrade(exitPnl, slHit ? -1 : 1)
+        inTrade := false
+        if showX
+            if not na(entryLn)
+                line.set_extend(entryLn, extend.none)
+                line.set_x2(entryLn, bar_index)
+            if not na(slLn)
+                line.set_extend(slLn, extend.none)
+                line.set_x2(slLn, bar_index)
+            if not na(tpLn)
+                line.set_extend(tpLn, extend.none)
+                line.set_x2(tpLn, bar_index)
+            if not na(slBox)
+                box.set_extend(slBox, extend.none)
+                box.set_right(slBox, bar_index)
+            if not na(tpBox)
+                box.set_extend(tpBox, extend.none)
+                box.set_right(tpBox, bar_index)
+            xLbl := label.new(bar_index, exitPx, "X", style=label.style_label_center, color=color.new(color.black, 100), textcolor=xCol, size=size.large, force_overlay=true)
+        else
+            clearLines()
+
+// ── 2) New entry: close open trade (reversal) and open the new one ──
+if buy or sell
+    if not na(lastSigTime)
+        array.push(gaps, time - lastSigTime)
+        while array.size(gaps) > lookback
+            array.shift(gaps)
+    lastSigTime := time
+    if inTrade
+        float revPnl = dir == 1 ? (close - entryPx) / entryPx * 100 : (entryPx - close) / entryPx * 100
+        recordTrade(revPnl, 0)
+    clearLines()
+    dir := buy ? 1 : -1
+    entryPx := close
+    inTrade := true
+    slPx := not hasSl ? na : slAtr ? (dir == 1 ? close - atr * slMult : close + atr * slMult) : slWick ? sigWick : sigOpen
+    float riskDist = math.abs(close - slPx)
+    slAtrX := hasSl and not slAtr and atr > 0 ? riskDist / atr : na
+    float tpDist = tpAtr ? atr * tpMult : riskDist * tpRMult
+    tpPx := not hasTp ? na : dir == 1 ? close + tpDist : close - tpDist
+    if useRisk and (not na(atr) or not riskOn)
+        if showTradeLines
+            entryLn := line.new(bar_index, entryPx, bar_index + 1, entryPx, extend=extend.right, color=entryCol, width=lineW, force_overlay=true)
+            if hasSl
+                slLn := line.new(bar_index, slPx, bar_index + 1, slPx, extend=extend.right, color=slCol, width=lineW, style=line.style_dashed, force_overlay=true)
+            if hasTp
+                tpLn := line.new(bar_index, tpPx, bar_index + 1, tpPx, extend=extend.right, color=tpCol, width=lineW, style=line.style_dashed, force_overlay=true)
+        if showTradeLbl
+            entryLbl := label.new(bar_index, entryPx, "Entry " + str.tostring(entryPx, format.mintick), style=label.style_label_left, color=color.new(color.black, 100), textcolor=entryCol, size=size.small, force_overlay=true)
+            if hasSl
+                slLbl := label.new(bar_index, slPx, "SL " + str.tostring(slPx, format.mintick), style=label.style_label_left, color=color.new(color.black, 100), textcolor=slCol, size=size.small, force_overlay=true)
+            if hasTp
+                tpLbl := label.new(bar_index, tpPx, "TP " + str.tostring(tpPx, format.mintick) + (tpRisk ? " (1:" + str.tostring(tpRMult, "0.00") + ")" : ""), style=label.style_label_left, color=color.new(color.black, 100), textcolor=tpCol, size=size.small, force_overlay=true)
+        if showZone
+            if hasSl
+                slBox := box.new(bar_index, math.max(entryPx, slPx), bar_index + 1, math.min(entryPx, slPx), border_color=na, bgcolor=slZoneCol, extend=extend.right, force_overlay=true)
+            if hasTp
+                tpBox := box.new(bar_index, math.max(entryPx, tpPx), bar_index + 1, math.min(entryPx, tpPx), border_color=na, bgcolor=tpZoneCol, extend=extend.right, force_overlay=true)
+
+// ── Plots (on the price chart) ────────────────────────────
+plotshape(showOcRaw and ocBuy,  "OC Buy (raw)",  shape.triangleup,   location.belowbar, color.new(buyCol, 40),  size=size.tiny, force_overlay=true)
+plotshape(showOcRaw and ocSell, "OC Sell (raw)", shape.triangledown, location.abovebar, color.new(sellCol, 40), size=size.tiny, force_overlay=true)
+
+plotshape(showLabels and lblSize == "Tiny" and buy,    "Buy (Tiny)",    shape.labelup,   location.belowbar, buyCol,  text="BUY",  textcolor=color.white, size=size.tiny,   force_overlay=true)
+plotshape(showLabels and lblSize == "Tiny" and sell,   "Sell (Tiny)",   shape.labeldown, location.abovebar, sellCol, text="SELL", textcolor=color.white, size=size.tiny,   force_overlay=true)
+plotshape(showLabels and lblSize == "Small" and buy,   "Buy (Small)",   shape.labelup,   location.belowbar, buyCol,  text="BUY",  textcolor=color.white, size=size.small,  force_overlay=true)
+plotshape(showLabels and lblSize == "Small" and sell,  "Sell (Small)",  shape.labeldown, location.abovebar, sellCol, text="SELL", textcolor=color.white, size=size.small,  force_overlay=true)
+plotshape(showLabels and lblSize == "Normal" and buy,  "Buy (Normal)",  shape.labelup,   location.belowbar, buyCol,  text="BUY",  textcolor=color.white, size=size.normal, force_overlay=true)
+plotshape(showLabels and lblSize == "Normal" and sell, "Sell (Normal)", shape.labeldown, location.abovebar, sellCol, text="SELL", textcolor=color.white, size=size.normal, force_overlay=true)
+plotshape(showLabels and lblSize == "Large" and buy,   "Buy (Large)",   shape.labelup,   location.belowbar, buyCol,  text="BUY",  textcolor=color.white, size=size.large,  force_overlay=true)
+plotshape(showLabels and lblSize == "Large" and sell,  "Sell (Large)",  shape.labeldown, location.abovebar, sellCol, text="SELL", textcolor=color.white, size=size.large,  force_overlay=true)
+plotshape(showLabels and lblSize == "Huge" and buy,    "Buy (Huge)",    shape.labelup,   location.belowbar, buyCol,  text="BUY",  textcolor=color.white, size=size.huge,   force_overlay=true)
+plotshape(showLabels and lblSize == "Huge" and sell,   "Sell (Huge)",   shape.labeldown, location.abovebar, sellCol, text="SELL", textcolor=color.white, size=size.huge,   force_overlay=true)
+
+// ── THECC logo watermark ──────────────────────────────────
+var table logoBox = showLogo ? table.new(posOf(logoPos), 1, 2, force_overlay=true) : na
+if showLogo and barstate.islast
+    table.cell(logoBox, 0, 0, "THECC", text_color=color.new(brandCol, logoTransp), text_size=sizeOf(logoSize), text_halign=text.align_center)
+    table.cell(logoBox, 0, 1, "THECC AI Coach  •  OC + Spread RSI", text_color=color.new(color.gray, logoTransp), text_size=size.small, text_halign=text.align_center)
+
+// ── Info box ──────────────────────────────────────────────
+fmt(float x) =>
+    na(x) ? "n/a" : (x >= 0 ? "+" : "") + str.tostring(x, "0.00") + "%"
+
+posCol(float x) =>
+    na(x) ? color.white : x >= 0 ? color.new(#4CAF50, 0) : color.new(#F23645, 0)
+
+// Formats milliseconds in the largest unit that keeps the number at 1 or more
+fmtDur(float ms) =>
+    float unitMs = na(ms) ? 1.0 : ms < 60000.0 ? 1000.0 : ms < 3600000.0 ? 60000.0 : ms < 86400000.0 ? 3600000.0 : ms < 604800000.0 ? 86400000.0 : ms < 2629800000.0 ? 604800000.0 : ms < 31557600000.0 ? 2629800000.0 : 31557600000.0
+    string unitTxt = na(ms) ? "" : ms < 60000.0 ? "sec" : ms < 3600000.0 ? "min" : ms < 86400000.0 ? "hr" : ms < 604800000.0 ? "days" : ms < 2629800000.0 ? "wks" : ms < 31557600000.0 ? "mo" : "yrs"
+    na(ms) ? "n/a" : str.tostring(ms / unitMs, "0.0") + " " + unitTxt
+
+tfTxt = timeframe.isseconds ? str.tostring(timeframe.multiplier) + "s" : timeframe.isminutes ? (timeframe.multiplier % 60 == 0 ? str.tostring(math.round(timeframe.multiplier / 60)) + "h" : str.tostring(timeframe.multiplier) + "m") : timeframe.isdaily ? (timeframe.multiplier == 1 ? "D" : str.tostring(timeframe.multiplier) + "D") : timeframe.isweekly ? (timeframe.multiplier == 1 ? "W" : str.tostring(timeframe.multiplier) + "W") : (timeframe.multiplier == 1 ? "M" : str.tostring(timeframe.multiplier) + "M")
+sessTxt = str.upper(str.substring(syminfo.session, 0, 1)) + str.substring(syminfo.session, 1)
+chartType = chart.is_heikinashi ? "Heikin Ashi" : chart.is_renko ? "Renko" : chart.is_kagi ? "Kagi" : chart.is_linebreak ? "Line Break" : chart.is_pnf ? "Point & Figure" : chart.is_range ? "Range" : "Standard"
+
+color brandBg = color.new(#0B1F3A, 0)
+color cGreen  = color.new(#4CAF50, 0)
+color cRed    = color.new(#F23645, 0)
+
+var table infoBox = not showTable ? na : table.new(tPos, 2, 28, bgcolor=color.new(#131722, 10), frame_color=color.new(brandCol, 30), frame_width=1, border_color=color.new(color.gray, 60), border_width=1, force_overlay=true)
+
+if barstate.isfirst and showTable
+    table.merge_cells(infoBox, 0, 0, 1, 0)
+    table.merge_cells(infoBox, 0, 1, 1, 1)
+    table.merge_cells(infoBox, 0, 17, 1, 17)
+    table.merge_cells(infoBox, 0, 27, 1, 27)
+
+row(int r, string k, string v, color vc) =>
+    table.cell(infoBox, 0, r, k, text_color=color.white, text_halign=text.align_left, text_size=tSize)
+    table.cell(infoBox, 1, r, v, text_color=vc, text_halign=text.align_right, text_size=tSize)
+
+if showTable and barstate.islast
+    int n = array.size(pnls)
+    int winCnt = 0
+    int lossCnt = 0
+    int tpCnt = 0
+    int slCnt = 0
+    int revCnt = 0
+    float winSum = 0.0
+    float lossSum = 0.0
+    float eq = 1.0
+    float peak = 1.0
+    float maxDD = 0.0
+
+    if n > 0
+        for i = 0 to n - 1
+            float p = array.get(pnls, i)
+            int r = array.get(reasons, i)
+            if r == 1
+                tpCnt += 1
+            else if r == -1
+                slCnt += 1
+            else
+                revCnt += 1
+            if p > 0
+                winCnt += 1
+                winSum += p
+            else if p < 0
+                lossCnt += 1
+                lossSum += p
+            eq := eq * (1 + p / 100)
+            peak := math.max(peak, eq)
+            maxDD := math.min(maxDD, (eq / peak - 1) * 100)
+
+    float netPnl = n > 0 ? (eq - 1) * 100 : na
+    float winRate = n > 0 ? winCnt / n * 100 : na
+    float avgWin = winCnt > 0 ? winSum / winCnt : na
+    float avgLoss = lossCnt > 0 ? lossSum / lossCnt : na
+    float openPnl = not inTrade ? na : dir == 1 ? (close - entryPx) / entryPx * 100 : (entryPx - close) / entryPx * 100
+
+    // Header (THECC logo)
+    table.cell(infoBox, 0, 0, "THECC", text_color=brandCol, bgcolor=brandBg, text_halign=text.align_center, text_size=sizeOf(tableSize == "Tiny" ? "Small" : tableSize == "Small" ? "Normal" : "Large"))
+    table.cell(infoBox, 0, 1, "OC + SPREAD RSI STRATEGY", text_color=color.white, bgcolor=color.new(#3B5B92, 0), text_halign=text.align_center, text_size=tSize)
+
+    row(2, "Chart Type", chartType, chart.is_standard ? color.white : cRed)
+    row(3, "Timeframe / Session", tfTxt + " / " + sessTxt, color.white)
+    row(4, "Non-Repaint", nonRepaint ? "ON" : "OFF", nonRepaint ? cGreen : cRed)
+    row(5, "Avg Body Length", str.tostring(bodyLen), color.white)
+    row(6, "Min Body", str.tostring(bodyMult, "0.0") + "x", color.white)
+    row(7, "Min Volume", volMult > 0 ? str.tostring(volMult, "0.0") + "x" : "OFF", volMult > 0 ? color.white : cRed)
+    row(8, "Alternate Signals", alternate ? "ON" : "OFF", alternate ? cGreen : cRed)
+
+    string rsiTxt = na(rsiSpread) ? "n/a" : str.tostring(rsiSpread, "0.0")
+    color rsiTxtCol = na(rsiSpread) ? color.white : rsiSpread > rsiUpper ? cGreen : rsiSpread < rsiLower ? cRed : color.white
+    array<string> symParts = str.split(symbol_2, ":")
+    string sym2Txt = array.size(symParts) > 0 ? array.get(symParts, array.size(symParts) - 1) : symbol_2
+    row(9, "Spread RSI vs " + sym2Txt, useRsi ? rsiTxt : "OFF", useRsi ? rsiTxtCol : cRed)
+    row(10, "RSI Upper / Lower", str.tostring(rsiUpper) + " / " + str.tostring(rsiLower), color.white)
+    row(11, "Confirmation", confNext ? "Next candle (" + str.tostring(confWin) + " bar" + (confWin > 1 ? "s" : "") + ")" : "Signal candle", color.white)
+    string setupTxt = confNext and pendDir == 1 ? "BUY - awaiting bullish candle" : confNext and pendDir == -1 ? "SELL - awaiting bearish candle" : inTrade ? (dir == 1 ? "In LONG" : "In SHORT") : "Flat"
+    int setupDir = confNext and pendDir != 0 ? pendDir : inTrade ? dir : 0
+    row(12, "Setup Status", setupTxt, setupDir == 1 ? cGreen : setupDir == -1 ? cRed : color.white)
+
+    row(13, "Exit Trigger", riskOn ? exitMode : "-", color.white)
+    string slAtrTxt = na(slAtrX) ? "n/a" : str.tostring(slAtrX, "0.0") + "x ATR"
+    string slTxt = slAtr ? str.tostring(slMult, "0.0") + "x ATR" : slWick ? "CW: " + slAtrTxt : hasSl ? "CB: " + slAtrTxt : "None"
+    string tpTxt = tpAtr ? str.tostring(tpMult, "0.0") + "x ATR" : tpRisk and hasSl ? "1:" + str.tostring(tpRMult, "0.00") + " R:R" : "Opp. Signal"
+    row(14, "Stop Loss", useRisk ? slTxt : "OFF", useRisk ? color.white : cRed)
+    row(15, "Take Profit", useRisk ? tpTxt : "OFF", useRisk ? color.white : cRed)
+    row(16, "ATR Length", str.tostring(atrLen), color.white)
+
+    table.cell(infoBox, 0, 17, "LOOKBACK P/L", text_color=color.white, bgcolor=color.new(#3B5B92, 0), text_halign=text.align_center, text_size=tSize)
+
+    row(18, "Trades Counted", str.tostring(n) + " / " + str.tostring(lookback), color.white)
+    row(19, "Exits TP / SL / Signal", (useRisk and hasTp ? str.tostring(tpCnt) : "-") + " / " + (useRisk and hasSl ? str.tostring(slCnt) : "-") + " / " + str.tostring(revCnt), color.white)
+    row(20, "Net P/L", fmt(netPnl), posCol(netPnl))
+    row(21, "Win Rate", na(winRate) ? "n/a" : str.tostring(winRate, "0") + "% (" + str.tostring(winCnt) + "W/" + str.tostring(lossCnt) + "L)", color.white)
+    row(22, "Avg Win / Loss", fmt(avgWin) + " / " + fmt(avgLoss), color.white)
+    row(23, "Max Drawdown", n > 0 ? fmt(maxDD) : "n/a", maxDD < 0 ? cRed : color.white)
+    row(24, "Open Trade P/L", fmt(openPnl), posCol(openPnl))
+
+    float avgMs = array.size(gaps) > 0 ? array.avg(gaps) : na
+    float sinceMs = na(lastSigTime) ? na : time - lastSigTime
+    row(25, "Avg Time per Signal", fmtDur(avgMs), color.white)
+    row(26, "Time Since Last Signal", fmtDur(sinceMs), color.white)
+
+    table.cell(infoBox, 0, 27, "THECC AI Coach • Educational only. Not financial advice.", text_color=color.new(brandCol, 20), bgcolor=brandBg, text_halign=text.align_center, text_size=size.tiny)
+
+// ── Alerts ────────────────────────────────────────────────
+alertcondition(buy,    "THECC Buy Entry",  "THECC BUY: OC buy + Spread RSI above upper line + bullish confirmation candle")
+alertcondition(sell,   "THECC Sell Entry", "THECC SELL: OC sell + Spread RSI below lower line + bearish confirmation candle")
+alertcondition(ocBuy,  "OC Buy Signal (raw)",  "OC BUY: close broke above the prior body (awaiting THECC confirmation)")
+alertcondition(ocSell, "OC Sell Signal (raw)", "OC SELL: close broke below the prior body (awaiting THECC confirmation)")
+alertcondition(tpHit,  "Take Profit Hit", "THECC: TP hit on the open trade")
+alertcondition(slHit,  "Stop Loss Hit",   "THECC: SL hit on the open trade")
