@@ -36,3 +36,38 @@ Each trade gets a teal target zone, a red stop zone and an entry line. The brack
 Alerts: THECC Buy, THECC Sell, Take Profit Hit, Stop Loss Hit, plus all of the original MOM alerts.
 
 *THECC AI Coach. For education only, not financial advice.*
+
+---
+
+# THECC Q-Trend + P&D Zones + Adaptive MACD Strategy (TradingView)
+
+`THECC_QTrend_PD_MACD.pine` puts **Q-Trend**, **Dynamic Premium & Discount Zones** and **Adaptive MACD** into one THECC-branded Pine v6 indicator. It adds a combined BUY/SELL signal and an Entry / Stop Loss / Take Profit bracket on top.
+
+## Install
+In TradingView, open the Pine Editor, paste the file contents, then click **Add to chart**. The Adaptive MACD shows in its own pane. Q-Trend, the zones, signals, brackets and panels show on the price chart.
+
+## Default settings (from the strategy walkthrough)
+| Setting | Original | THECC default |
+|---|---|---|
+| Q-Trend: Smooth source with EMA? | No | **No** |
+| Q-Trend: ATR Multiplier | 1.0 | **0.8** |
+| P&D: Equilibrium line | Smooth | **Stepped** |
+| Adaptive MACD: R2 Period | 20 | **18** |
+| Adaptive MACD: Histogram style | Columns | **Histogram** |
+| Adaptive MACD: MACD line | chart text colour, width 1 | **blue, width 2** |
+| Risk : Reward | – | **1 : 1.5** |
+
+Every other setting keeps the original indicator's default.
+
+## Signals
+- **SELL:** Q-Trend prints a **SELL or STRONG SELL** label, the MACD **orange (signal) line is above the blue (MACD) line**, and a **bearish candle** closes. The stop goes at the **previous high**.
+- **BUY:** Q-Trend prints a **BUY or STRONG BUY** label, the MACD **blue line is above the orange line**, and a **bullish candle** closes. The stop goes at the **previous low**.
+- **Target:** 1.5 × the stop distance.
+
+The MACD and candle confirmation can come on the label bar or within the next few bars (*Confirmation window*, default 3). The setup is cancelled if Q-Trend flips the other way. "Previous high/low" means the highest high or lowest low of the last 10 bars (*Swing lookback*). You can switch it to the previous candle instead. Optional settings: take STRONG labels only, or require BUYs in discount and SELLs in premium (*Premium/Discount filter*, off by default).
+
+THECC signals show as **THECC BUY / THECC SELL** labels, one ATR beyond the candle so they don't cover the Q-Trend labels.
+
+Alerts: THECC Buy, THECC Sell, THECC Signal, Take Profit Hit, Stop Loss Hit, plus all of the original Q-Trend and Premium & Discount alerts.
+
+*THECC AI Coach. For education only, not financial advice.*
