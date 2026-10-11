@@ -1,0 +1,809 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © THECC — THECC AI Coach
+//
+// THECC Q-Trend + Premium/Discount + Adaptive MACD Strategy
+// Combines "Q-Trend", "Dynamic Premium & Discount Zones" and "Adaptive MACD" into one indicator,
+// then trades the THECC BUY/SELL signals as a strategy so they can be backtested in the Strategy Tester.
+//
+// Defaults follow the THECC strategy walkthrough:
+//   Q-Trend:        Smooth source with EMA = No, ATR Multiplier 1.0 -> 0.8
+//   P&D Zones:      Equilibrium line Smooth -> Stepped
+//   Adaptive MACD:  R2 Period 20 -> 18, histogram style Columns -> Histogram, MACD line black -> blue and thicker
+//   SELL: Q-Trend SELL / STRONG SELL label + orange (signal) line above the blue (MACD) line + bearish candle. SL at the previous high.
+//   BUY:  Q-Trend BUY / STRONG BUY label + blue (MACD) line above the orange (signal) line + bullish candle. SL at the previous low.
+//   Take profit at 1 : 1.5 risk-to-reward.
+// Strategy version: everything is drawn on the price chart. The Adaptive MACD is calculated for the signals but its lines are hidden
+// (they would squash the price scale); add the THECC QT+PD+MACD indicator next to it to see the MACD pane.
+// Educational use only. Not financial advice.
+
+//@version=6
+strategy("THECC Q-Trend + P&D Zones + Adaptive MACD Strategy [Backtest]", shorttitle = "THECC QT+PD+MACD Strat", overlay = true, max_lines_count = 500, max_labels_count = 500, max_boxes_count = 500, initial_capital = 10000, currency = currency.USD, default_qty_type = strategy.percent_of_equity, default_qty_value = 100, pyramiding = 0, commission_type = strategy.commission.percent, commission_value = 0.0, slippage = 0, process_orders_on_close = true, calc_on_every_tick = false)
+
+
+// ════════════════════════════════════════════════════════════════════════════════
+// THECC STRATEGY INPUTS
+// ════════════════════════════════════════════════════════════════════════════════
+string g_thecc    = 'THECC Signals'
+bool   t_nonRepaint = input.bool(true, 'Non-repaint (signals on bar close)', group = g_thecc, tooltip = 'ON: signals, entries and exits are only taken on closed bars and never move or disappear.')
+string t_qtSigs   = input.string('Buy/Sell + Strong', 'Q-Trend signals used', options = ['Buy/Sell + Strong', 'Strong only'], group = g_thecc, tooltip = 'Which Q-Trend labels can start a THECC setup. The walkthrough takes both BUY/SELL and STRONG labels.')
+int    t_confWin  = input.int(3, 'Confirmation window (bars)', minval = 1, maxval = 20, group = g_thecc, tooltip = 'After a Q-Trend label, how many bars (including the label bar) the MACD condition and the bullish/bearish confirmation candle may appear in. The setup is cancelled if Q-Trend flips the other way or the window ends.')
+bool   t_zoneFilt = input.bool(false, 'Premium/Discount filter', group = g_thecc, tooltip = 'ON: BUY only when price closes in discount (below equilibrium) and SELL only when it closes in premium (above equilibrium). OFF (walkthrough default): the zones are visual context only.')
+bool   t_closeOpp = input.bool(true, 'Close trade on opposite signal', group = g_thecc, tooltip = 'ON: an open trade is closed at the close of the bar that gives the opposite THECC signal, then the new trade opens.')
+bool   t_showSig  = input.bool(true, 'Show THECC BUY/SELL labels', group = g_thecc)
+color  t_buyCol   = input.color(#2962FF, 'Buy color', group = g_thecc)
+color  t_sellCol  = input.color(#F23645, 'Sell color', group = g_thecc)
+
+string g_brk      = 'THECC Bracket (SL / TP)'
+string t_slMode   = input.string('Previous swing', 'Stop loss placement', options = ['Previous swing', 'Previous candle'], group = g_brk, tooltip = 'Previous swing: BUY stop at the lowest low and SELL stop at the highest high of the swing lookback (the previous low/high of the market). Previous candle: the prior candle\'s low/high.')
+int    t_swingLen = input.int(10, 'Swing lookback (bars)', minval = 2, maxval = 200, group = g_brk, tooltip = 'Bars searched for the previous low (BUY) or previous high (SELL). Used only when Stop loss placement is Previous swing.')
+float  t_slBufTk  = input.float(0.0, 'Stop buffer (ticks)', minval = 0.0, step = 1.0, group = g_brk, tooltip = 'Extra distance beyond the stop level, in ticks.')
+float  t_rr       = input.float(1.5, 'Risk : Reward (1 : x)', minval = 0.1, step = 0.1, group = g_brk, tooltip = 'Take profit distance as a multiple of the stop distance. THECC default: 1.5.')
+string t_exitMode = input.string('Wick', 'Exit trigger', options = ['Wick', 'Close'], group = g_brk, tooltip = 'Wick: SL/TP is hit when the high/low touches the level. Close: only when a bar closes beyond it. If SL and TP are touched on the same bar, SL is assumed first.')
+bool   t_showBrk  = input.bool(true, 'Show bracket', group = g_brk)
+int    t_brkLen   = input.int(20, 'Bracket length (bars)', minval = 2, maxval = 200, group = g_brk, tooltip = 'How far right the bracket is drawn when a trade opens. It is cut at the exit bar.')
+color  t_tpCol    = input.color(color.new(#00BCD4, 80), 'Target zone color', group = g_brk)
+color  t_slCol    = input.color(color.new(#F23645, 80), 'Stop zone color', group = g_brk)
+color  t_entryCol = input.color(#787B86, 'Entry line color', group = g_brk)
+bool   t_showRes  = input.bool(true, 'Show trade result labels', group = g_brk)
+
+string g_bt       = 'THECC Backtest'
+string t_qtyMode  = input.string('Risk % of equity', 'Position size', options = ['Risk % of equity', 'Strategy properties'], group = g_bt, tooltip = 'Risk % of equity: each trade is sized so that hitting the stop loses this share of current equity. Strategy properties: use the Order size set on the Properties tab.')
+float  t_riskPct  = input.float(1.0, 'Risk per trade (%)', minval = 0.01, maxval = 100, step = 0.25, group = g_bt)
+bool   t_wholeQty = input.bool(false, 'Round size down to whole units', group = g_bt, tooltip = 'Turn on for futures or stocks that only trade whole contracts/shares.')
+string t_dirAllow = input.string('Long & Short', 'Trade direction', options = ['Long & Short', 'Long only', 'Short only'], group = g_bt)
+bool   t_useDate  = input.bool(false, 'Limit backtest to a date range', group = g_bt)
+int    t_from     = input.time(timestamp('2024-01-01T00:00:00'), 'From', group = g_bt)
+int    t_to       = input.time(timestamp('2099-12-31T00:00:00'), 'To', group = g_bt)
+
+string g_brand    = 'THECC Panel & Branding'
+bool   t_showPanel = input.bool(true, 'Show THECC panel', group = g_brand)
+string t_panelPos = input.string('Top Left', 'Panel position', options = ['Top Left', 'Top Center', 'Top Right', 'Middle Left', 'Middle Center', 'Middle Right', 'Bottom Left', 'Bottom Center', 'Bottom Right'], group = g_brand, tooltip = 'Top Left keeps it clear of the Premium & Discount panel (Top Right).')
+string t_panelSize = input.string('Small', 'Panel text size', options = ['Tiny', 'Small', 'Normal', 'Large'], group = g_brand)
+bool   t_showLogo = input.bool(true, 'Show THECC logo watermark', group = g_brand)
+string t_logoPos  = input.string('Bottom Center', 'Logo position', options = ['Top Left', 'Top Center', 'Top Right', 'Middle Left', 'Middle Center', 'Middle Right', 'Bottom Left', 'Bottom Center', 'Bottom Right'], group = g_brand)
+color  t_brandCol = input.color(#D4AF37, 'Brand accent color', group = g_brand)
+int    t_logoTransp = input.int(70, 'Logo transparency', minval = 0, maxval = 100, group = g_brand)
+
+getSize(string s) =>
+    switch s
+        'Tiny'   => size.tiny
+        'Normal' => size.normal
+        'Large'  => size.large
+        => size.small
+
+
+// ════════════════════════════════════════════════════════════════════════════════
+// DYNAMIC PREMIUM & DISCOUNT ZONES
+// ════════════════════════════════════════════════════════════════════════════════
+
+// ═══════════════════════ Inputs ═══════════════════════
+grpR = "P&D Dealing range"
+swLen   = input.int(8, "Swing length", minval = 2, maxval = 50, group = grpR, tooltip = "Bars on each side that make a swing high or low. The dealing range starts from the latest confirmed swing low and swing high, and its edges move out with price whenever price trades beyond them.")
+eqStyle = input.string("Stepped", "Equilibrium line", options = ["Smooth", "Stepped"], group = grpR, tooltip = "Smooth eases the 50% line from one level to the next in an even S-curve. Stepped draws the exact 50% of the range: flat while the range holds, stepping when it changes. THECC default: Stepped.")
+eqLen   = input.int(6, "Smoothing", minval = 2, maxval = 30, group = grpR, tooltip = "How gently the Smooth line eases to a new midpoint. A change in the range takes about twice this many bars to complete. Higher is smoother but trails further behind.")
+
+grpG = "P&D Glow"
+glowAmt = input.int(30, "Glow at candles", minval = 0, maxval = 100, group = grpG, tooltip = "Opacity of the translucent base glow where it reaches the candles. It runs to the middle of each candle body, behind the candle, and fades out at the 50% line. Brightness also scales with how deep price is in its zone.")
+midAmt  = input.int(10, "Mid layer", minval = 0, maxval = 100, group = grpG, tooltip = "Translucent layer starting halfway to the candles, so the glow builds toward them. 0 turns it off.")
+coreAmt = input.int(15, "Core glow", minval = 0, maxval = 100, group = grpG, tooltip = "Lighter layer over the 15% of the glow closest to the candles, so each candle looks lit from behind. 0 turns it off.")
+hotAmt  = input.int(20, "Deep-zone heat", minval = 0, maxval = 100, group = grpG, tooltip = "White-hot layer between the deep line and the candle, shown only on bars that close in deep premium or deep discount. 0 turns it off.")
+
+grpD = "P&D Detail"
+showCont   = input.bool(true, "Depth contours", group = grpD, tooltip = "Faint lines at 25% and 50% depth and a brighter deep line, drawn only inside the glow, so you can see how far into its zone price has travelled.")
+showCross  = input.bool(true, "Equilibrium crosses", group = grpD, tooltip = "A dot on the 50% line on each bar that closes across it. On very low timeframes price crosses often; switch this off if the line looks busy.")
+colCandles = input.bool(false, "Colour candles by zone", group = grpD, tooltip = "Colours every candle in the zone it closes in: premium colour above equilibrium, discount colour below. Overrides the Q-Trend bar colours while on. Off by default.")
+heatCnd    = input.bool(true, "Heat deep candles", group = grpD, tooltip = "With zone colouring on, candles that close in deep premium or deep discount are drawn in a lighter, white-hot version of the zone colour.")
+dnStyle    = input.string("Same colour", "Down candles", options = ["Same colour", "Dimmer"], group = grpD, tooltip = "With zone colouring on: Same colour keeps every candle in the zone colour, Dimmer blends down-candle bodies 30% toward the chart background so direction stays readable.")
+
+grpE = "P&D Round trips"
+deepPct = input.int(75, "Deep zone from", minval = 50, maxval = 95, step = 5, group = grpE, tooltip = "How far from equilibrium price must close, as a share of the distance from equilibrium to the range edge on that side, to count as deep premium or deep discount. 75 means the outer quarter of that distance. The deep line, the deep-zone heat, the gauge's deep bands and the panel's depth zones all use this level.")
+minTrip = input.int(3, "Minimum trip length", minval = 1, maxval = 50, group = grpE, tooltip = "Round trips that return in fewer than this many bars are not marked, and raise no Back to equilibrium alert either. A trip that expires without returning is always marked, because it ran the whole return window.")
+showEx  = input.bool(true, "Show the latest round trip", group = grpE, tooltip = "A ◆ on the bar where price closes in deep premium or discount, and a dot on the bar it trades back to the equilibrium level fixed at the ◆ bar. If price has not returned to that level within the return window the trip expires: the ◆ stays, dimmed, and no dot is drawn. Only the latest marked round trip and the one in progress are kept.")
+horiz   = input.int(20, "Return window", minval = 2, maxval = 300, group = grpE, tooltip = "The figure beside the gauge shows how often, on this chart, price traded back to the equilibrium level it had on the bar price entered the depth zone it is in now, within this many bars, with the sample count beside it. The figure is hidden while price is within a quarter of the way from equilibrium to the range edge.")
+
+grpK = "P&D Gauge"
+showGauge = input.bool(true, "Position gauge", group = grpK, tooltip = "Glass gauge right of the last bar, drawn to the price scale: the dealing range with its premium and discount halves, deep bands, a fill from equilibrium to price, and the live zone and its return rate beside it. Redrawn on every tick.")
+showLive  = input.bool(true, "Price leader", group = grpK, tooltip = "A glowing dot beside the current candle at the live close and a dotted line from it to the gauge. Redrawn on every tick.")
+gOff      = input.int(10, "Gauge offset", minval = 4, maxval = 100, group = grpK, tooltip = "Bars between the last candle and the gauge.")
+gW        = input.int(5, "Gauge width", minval = 2, maxval = 30, group = grpK, tooltip = "Width of the gauge in bars.")
+
+grpP = "P&D Panel"
+showTbl = input.bool(true, "Show panel", group = grpP, tooltip = "Readout of the range and the return-to-equilibrium statistics.")
+tblMode = input.string("Compact", "Panel detail", options = ["Compact", "Full"], group = grpP, tooltip = "Compact shows the figure for the zone price is in now. Full lists all four depth zones.")
+tblPos  = input.string("Top Right", "Position", options = ["Top Right", "Top Left", "Bottom Right", "Bottom Left"], group = grpP, tooltip = "Panel corner. Keep it in a different corner from the THECC panel.")
+tblSize = input.string("Small", "Text size", options = ["Tiny", "Small", "Normal"], group = grpP, tooltip = "Panel text size.")
+
+grpCol = "P&D Colours"
+colPrem = input.color(#ff1f8f, "Premium", group = grpCol, tooltip = "Glow, candles and gauge above equilibrium.")
+colDisc = input.color(#00e5ff, "Discount", group = grpCol, tooltip = "Glow, candles and gauge below equilibrium, and the panel's header bar.")
+colHi   = input.color(#ffd23f, "Highlight", group = grpCol, tooltip = "The ◆ marks and the return figure beside the gauge.")
+
+// ═══════════════════════ Dealing range (swings + live edges) ═══════════════════════
+ph    = ta.pivothigh(high, swLen, swLen)
+pl    = ta.pivotlow(low, swLen, swLen)
+winLo = ta.lowest(low, swLen + 1)
+winHi = ta.highest(high, swLen + 1)
+atr   = ta.atr(14)
+
+var float rTop = na
+var float rBot = na
+if not na(ph)
+    rTop := ph
+    if not na(rBot) and rBot >= rTop
+        rBot := winLo
+if not na(pl)
+    rBot := pl
+    if not na(rTop) and rTop <= rBot
+        rTop := winHi
+if not na(rTop) and high > rTop
+    rTop := high
+if not na(rBot) and low < rBot
+    rBot := low
+
+bool  rangeOK  = not na(rTop) and not na(rBot) and rTop > rBot
+var int mCount = 0
+mCount := rangeOK ? mCount + 1 : 0
+bool  hasRange = rangeOK and mCount >= (eqStyle == "Stepped" ? 1 : eqLen * 2)
+float rMid     = rangeOK ? (rTop + rBot) / 2 : hl2
+float eqSm     = ta.sma(ta.sma(rMid, eqLen), eqLen)
+float eqS      = eqStyle == "Stepped" ? rMid : (rangeOK ? math.min(math.max(eqSm, rBot), rTop) : eqSm)
+eqPlotStyle    = eqStyle == "Stepped" ? plot.style_steplinebr : plot.style_linebr
+bool  inPrem   = hasRange and close >= eqS
+float hUp      = hasRange ? math.max(rTop - eqS, 0) : 0.0
+float hDn      = hasRange ? math.max(eqS - rBot, 0) : 0.0
+float pos      = not hasRange ? na : inPrem ? (hUp > 0 ? 0.5 + 0.5 * (close - eqS) / hUp : 0.5) : (hDn > 0 ? 0.5 - 0.5 * (eqS - close) / hDn : 0.5)
+float depth    = not hasRange ? na : math.min(inPrem ? (hUp > 0 ? (close - eqS) / hUp : 0.0) : (hDn > 0 ? (eqS - close) / hDn : 0.0), 1.0)
+float kDeep    = deepPct / 100.0
+bool  isDeep   = hasRange and depth >= kDeep
+color cSide    = inPrem ? colPrem : colDisc
+color cHot     = color.from_gradient(35, 0, 100, cSide, #ffffff)
+color cLit     = color.from_gradient(25, 0, 100, cSide, #ffffff)
+color cClear   = color.new(cSide, 100)
+// theme: every readout is measured against the chart background with the WCAG contrast
+// formula and swapped for a legible alternative when it falls short, so the script adapts
+// to any background rather than to a light/dark flag
+const float MIN_CONTRAST = 4.5
+const float MIN_PANEL    = 3.0
+
+f_lum(color c) =>
+    float r  = color.r(c) / 255.0
+    float g  = color.g(c) / 255.0
+    float b  = color.b(c) / 255.0
+    float rl = r <= 0.03928 ? r / 12.92 : math.pow((r + 0.055) / 1.055, 2.4)
+    float gl = g <= 0.03928 ? g / 12.92 : math.pow((g + 0.055) / 1.055, 2.4)
+    float bl = b <= 0.03928 ? b / 12.92 : math.pow((b + 0.055) / 1.055, 2.4)
+    0.2126 * rl + 0.7152 * gl + 0.0722 * bl
+
+f_contrast(float la, float lb) =>
+    (math.max(la, lb) + 0.05) / (math.min(la, lb) + 0.05)
+
+f_over(color c, float opacity) =>
+    color.rgb(color.r(c) * opacity + color.r(chart.bg_color) * (1 - opacity),
+      color.g(c) * opacity + color.g(chart.bg_color) * (1 - opacity),
+      color.b(c) * opacity + color.b(chart.bg_color) * (1 - opacity))
+
+float bgLum    = f_lum(chart.bg_color)
+bool  isLight  = f_contrast(f_lum(#0a0b0d), bgLum) >= f_contrast(f_lum(#ffffff), bgLum)
+color pillTxt  = isLight ? #0a0b0d : #ffffff
+color fg       = f_contrast(f_lum(chart.fg_color), bgLum) >= MIN_CONTRAST ? chart.fg_color : pillTxt
+color markHi   = isLight ? color.from_gradient(80, 0, 100, colHi, #000000) : colHi
+color eqTxt    = f_contrast(f_lum(f_over(fg, 0.65)), bgLum) >= MIN_CONTRAST ? color.new(fg, 35) : fg
+bool  figLight = f_contrast(f_lum(#6b5200), f_lum(f_over(colHi, 0.70))) > f_contrast(f_lum(colHi), f_lum(f_over(colHi, 0.12)))
+
+// panel cells: a coloured cell is measured against the chart background and stepped toward
+// black until it clears MIN_PANEL; if no step clears it the cell falls back to pillTxt.
+f_cellCol(color c) =>
+    color out  = c
+    bool  done = f_contrast(f_lum(c), bgLum) >= MIN_PANEL
+    for i = 1 to 9
+        if not done
+            color d = color.from_gradient(i * 10, 0, 100, c, #000000)
+            if f_contrast(f_lum(d), bgLum) >= MIN_PANEL
+                out  := d
+                done := true
+    done ? out : pillTxt
+
+// ═══════════════════════ Glow: equilibrium → middle of the candle body (candle covers the join) ═══════════════════════
+float bodyMid = (open + close) / 2
+float farEnd  = inPrem ? math.max(bodyMid, eqS) : math.min(bodyMid, eqS)
+float glowLen = farEnd - eqS
+bool  glowOn  = hasRange and math.abs(glowLen) > syminfo.mintick * 0.25
+float bright  = hasRange ? 0.45 + 0.55 * math.sqrt(depth) : 0.0
+float y50     = eqS + glowLen * 0.50
+float y85     = eqS + glowLen * 0.85
+
+f_tr(int amt) =>
+    int(math.round(100 - amt * bright))
+
+color cB = color.new(cSide, f_tr(glowAmt))
+color cM = color.new(cSide, f_tr(midAmt))
+color cC = color.new(cLit, f_tr(coreAmt))
+
+gBase = plot(glowOn ? eqS : na, "Glow base", color = color(na), style = eqPlotStyle, editable = false, display = display.none, force_overlay = true)
+g50   = plot(glowOn ? y50 : na, "Glow mid anchor", color = color(na), style = eqPlotStyle, editable = false, display = display.none, force_overlay = true)
+gCore = plot(glowOn ? y85 : na, "Glow core anchor", color = color(na), style = eqPlotStyle, editable = false, display = display.none, force_overlay = true)
+gEnd  = plot(glowOn ? farEnd : na, "Glow end", color = color(na), style = plot.style_linebr, editable = false, display = display.none, force_overlay = true)
+fill(gBase, gEnd, math.max(eqS, farEnd), math.min(eqS, farEnd), inPrem ? cB : cClear, inPrem ? cClear : cB, "Glow", editable = false)
+fill(g50, gEnd, math.max(y50, farEnd), math.min(y50, farEnd), inPrem ? cM : cClear, inPrem ? cClear : cM, "Glow mid", editable = false)
+fill(gCore, gEnd, math.max(y85, farEnd), math.min(y85, farEnd), inPrem ? cC : cClear, inPrem ? cClear : cC, "Glow core", editable = false)
+
+// ═══════════════════════ Depth contours + deep-zone heat (inside the glow only) ═══════════════════════
+float sgn   = inPrem ? 1.0 : -1.0
+float hSide = inPrem ? hUp : hDn
+
+f_contour(float k) =>
+    float lvl = eqS + sgn * hSide * k
+    glowOn and math.abs(lvl - eqS) < math.abs(glowLen) ? lvl : na
+
+float c25 = f_contour(0.25)
+float c50 = f_contour(0.50)
+float cDp = f_contour(kDeep)
+
+color cH   = color.new(cHot, f_tr(hotAmt))
+float cDpH = (glowOn and isDeep) ? eqS + sgn * math.min(hSide * kDeep, math.abs(glowLen)) : na
+pDeep = plot(hotAmt > 0 ? cDpH : na, "Deep heat start", color = color(na), style = eqPlotStyle, editable = false, display = display.none, force_overlay = true)
+fill(pDeep, gEnd, math.max(cDpH, farEnd), math.min(cDpH, farEnd), inPrem ? cH : cClear, inPrem ? cClear : cH, "Deep heat", editable = false)
+
+plot(showCont ? c25 : na, "Depth 25%", color = color.new(cLit, 82), linewidth = 1, style = eqPlotStyle, editable = false, display = display.pane, force_overlay = true)
+plot(showCont ? c50 : na, "Depth 50%", color = color.new(cLit, 72), linewidth = 1, style = eqPlotStyle, editable = false, display = display.pane, force_overlay = true)
+plot(showCont ? cDp : na, "Deep line", color = color.new(cHot, 40), linewidth = 1, style = eqPlotStyle, editable = false, display = display.pane, force_overlay = true)
+
+// ═══════════════════════ Candles by zone (optional) ═══════════════════════
+color cCnd   = heatCnd and isDeep ? cHot : cSide
+color cDnBar = dnStyle == "Dimmer" ? color.from_gradient(30, 0, 100, cCnd, chart.bg_color) : cCnd
+color cZoneBar = colCandles and hasRange ? (close >= open ? cCnd : cDnBar) : na
+
+// ═══════════════════════ Equilibrium ═══════════════════════
+plot(hasRange ? eqS : na, "Equilibrium zone glow", color = color.new(cSide, 85), linewidth = 10, style = eqPlotStyle, editable = false, display = display.pane, force_overlay = true)
+plot(hasRange ? eqS : na, "Equilibrium glow", color = color.new(fg, 78), linewidth = 4, style = eqPlotStyle, editable = false, display = display.pane, force_overlay = true)
+plot(hasRange ? eqS : na, "Equilibrium", color = fg, linewidth = 2, style = eqPlotStyle, display = display.pane + display.data_window + display.status_line, force_overlay = true)
+
+bool xUp    = ta.crossover(close, eqS)
+bool xDn    = ta.crossunder(close, eqS)
+bool xEq    = ta.cross(close, eqS)
+bool xShown = showCross and hasRange and xEq and barstate.isconfirmed
+plot(xShown ? eqS : na, "Equilibrium cross", color = fg, linewidth = 4, style = plot.style_circles, editable = false, display = display.pane, force_overlay = true)
+
+// ═══════════════════════ Return rate and round trips (bar close only) ═══════════════════════
+// every sample and every round trip stores the equilibrium level of the bar it started on;
+// a return means price traded back to that fixed level, so the line drifting toward price
+// does not count
+type Samp
+    int   bar
+    int   side
+    int   bucket
+    float target
+
+var array<Samp> pend       = array.new<Samp>()
+var array<int>  hitN       = array.new<int>(4, 0)
+var array<int>  totN       = array.new<int>(4, 0)
+var int         prevBucket = -1
+var bool        armed      = true
+var int         entBar     = na
+var int         entSide    = 0
+var float       entEq      = na
+var label       liveDia    = na
+var label       exDia      = na
+var label       exDot      = na
+
+f_bucket(float d) =>
+    d < kDeep / 3 ? 0 : d < kDeep * 2 / 3 ? 1 : d < kDeep ? 2 : 3
+
+f_bucketTxt(int k) =>
+    switch k
+        0 => "0–" + str.tostring(math.round(deepPct / 3.0)) + "% deep"
+        1 => str.tostring(math.round(deepPct / 3.0)) + "–" + str.tostring(math.round(deepPct * 2 / 3.0)) + "% deep"
+        2 => str.tostring(math.round(deepPct * 2 / 3.0)) + "–" + str.tostring(deepPct) + "% deep"
+        => str.tostring(deepPct) + "–100% deep"
+
+f_rate(int k) =>
+    int n = totN.get(k)
+    n > 0 ? str.tostring(math.round(100.0 * hitN.get(k) / n)) + "% · n " + str.tostring(n) : "—"
+
+bool aDeepP = false
+bool aDeepD = false
+bool aBack  = false
+
+if barstate.isconfirmed and hasRange
+    // return-to-equilibrium rate, filed per depth zone, against the level fixed at entry
+    if pend.size() > 0
+        for i = pend.size() - 1 to 0
+            Samp s   = pend.get(i)
+            bool hit = s.side == 1 ? low <= s.target : high >= s.target
+            if hit or bar_index - s.bar >= horiz
+                totN.set(s.bucket, totN.get(s.bucket) + 1)
+                if hit
+                    hitN.set(s.bucket, hitN.get(s.bucket) + 1)
+                pend.remove(i)
+    int bk = f_bucket(depth)
+    if bk != prevBucket
+        pend.push(Samp.new(bar_index, inPrem ? 1 : -1, bk, eqS))
+    prevBucket := bk
+
+    // round trips: an open trip is resolved first, so a bar that closes a trip can also open
+    // the next one; a trip ends either by trading back to the equilibrium level fixed at the
+    // ◆ bar, or by expiring on the same return window as the samples above
+    if not armed
+        bool touch   = entSide == 1 ? low <= entEq : high >= entEq
+        bool expired = not touch and bar_index - entBar >= horiz
+        if touch or expired
+            int tripLen = bar_index - entBar
+            armed := true
+            aBack := touch and tripLen >= minTrip
+            if showEx
+                if touch and tripLen >= minTrip
+                    if not na(exDia)
+                        exDia.delete()
+                    if not na(exDot)
+                        exDot.delete()
+                    exDia := liveDia
+                    exDot := label.new(bar_index, entEq, "", style = label.style_circle, color = colHi, size = size.tiny, tooltip = "Back to " + str.tostring(entEq, format.mintick) + ", the equilibrium at the ◆, in " + str.tostring(tripLen) + (tripLen == 1 ? " bar" : " bars"), force_overlay = true)
+                else if expired
+                    if not na(exDia)
+                        exDia.delete()
+                    if not na(exDot)
+                        exDot.delete()
+                    exDia := liveDia
+                    exDot := na
+                    if not na(exDia)
+                        exDia.set_textcolor(color.new(markHi, 50))
+                        exDia.set_tooltip("No return to " + str.tostring(entEq, format.mintick) + " within " + str.tostring(horiz) + " bars")
+                else if not na(liveDia)
+                    liveDia.delete()
+            liveDia := na
+    if armed and isDeep
+        armed   := false
+        entBar  := bar_index
+        entSide := inPrem ? 1 : -1
+        entEq   := eqS
+        aDeepP  := inPrem
+        aDeepD  := not inPrem
+        if showEx
+            liveDia := label.new(bar_index, inPrem ? high : low, "◆", style = inPrem ? label.style_label_down : label.style_label_up, color = color(na), textcolor = markHi, size = size.large, tooltip = (inPrem ? "Deep premium · " : "Deep discount · ") + str.tostring(math.round(pos * 100)) + "% of the range · equilibrium " + str.tostring(eqS, format.mintick), force_overlay = true)
+
+// ═══════════════════════ Price leader, gauge & readouts ═══════════════════════
+// readout spacing, as a share of the dealing-range span: a label is drawn only when it
+// clears the price needle and the return figure, and the figure sits this far from the needle
+const float CLR_PRICE        = 0.14
+const float CLR_OTHER        = 0.12
+const float FIG_OFF          = 0.13
+const float FIG_EQ_GAP       = 0.05
+const float FIG_MIN_DEPTH    = 0.25
+const int   GAUGE_FILL_STEPS = 20
+
+f_clear(float y, float yO, float sp) =>
+    math.abs(y - close) > CLR_PRICE * sp and (na(yO) or math.abs(y - yO) > CLR_OTHER * sp)
+
+var array<float> gTicks  = array.new<float>()
+var array<box>   gBoxes  = array.new<box>()
+var array<line>  gLines  = array.new<line>()
+var array<label> gLabels = array.new<label>()
+
+if barstate.islast
+    for gb in gBoxes
+        gb.delete()
+    for gl in gLines
+        gl.delete()
+    for gt in gLabels
+        gt.delete()
+    gBoxes.clear()
+    gLines.clear()
+    gLabels.clear()
+    if hasRange
+        int gx  = bar_index + gOff
+        int gx2 = gx + gW
+        int bx  = bar_index + 1
+
+        // price leader: glowing dot at the live close, dotted line into the gauge
+        if showLive
+            if showGauge
+                gLines.push(line.new(bx, close, gx - 1, close, color = color.new(cSide, 45), style = line.style_dotted, width = 1, force_overlay = true))
+            gLabels.push(label.new(bx, close, "", style = label.style_circle, color = color.new(cSide, 70), size = size.small, force_overlay = true))
+            gLabels.push(label.new(bx, close, "", style = label.style_circle, color = cHot, size = size.tiny, tooltip = (inPrem ? "Premium · " : "Discount · ") + str.tostring(math.round(pos * 100)) + "% of the range · " + str.tostring(math.abs(close - eqS) / atr, "0.0") + " ATR from equilibrium", force_overlay = true))
+
+        if showGauge
+            float span = rTop - rBot
+            float yDP  = eqS + hUp * kDeep
+            float yDD  = eqS - hDn * kDeep
+
+            // glass track: zone tints, stronger in the deep bands
+            gBoxes.push(box.new(gx, rTop, gx2, eqS, border_color = color(na), border_width = 0, bgcolor = color.new(colPrem, 87), force_overlay = true))
+            gBoxes.push(box.new(gx, eqS, gx2, rBot, border_color = color(na), border_width = 0, bgcolor = color.new(colDisc, 87), force_overlay = true))
+            gBoxes.push(box.new(gx, rTop, gx2, yDP, border_color = color(na), border_width = 0, bgcolor = color.new(colPrem, 74), force_overlay = true))
+            gBoxes.push(box.new(gx, yDD, gx2, rBot, border_color = color(na), border_width = 0, bgcolor = color.new(colDisc, 74), force_overlay = true))
+
+            // live fill: fades in from equilibrium to near-solid at price, inside the track only
+            float dist = close - eqS
+            if math.abs(dist) > syminfo.mintick * 0.25
+                for i = 0 to GAUGE_FILL_STEPS - 1
+                    float a  = i * 1.0 / GAUGE_FILL_STEPS
+                    float b  = (i + 1) * 1.0 / GAUGE_FILL_STEPS
+                    // transparency runs 90 at equilibrium to 5 at price, eased by a 1.6 power curve
+                    int   tf = int(math.round(90 - 85 * math.pow(b, 1.6)))
+                    gBoxes.push(box.new(gx, math.max(eqS + dist * a, eqS + dist * b), gx2, math.min(eqS + dist * a, eqS + dist * b), border_color = color(na), border_width = 0, bgcolor = color.new(cSide, tf), force_overlay = true))
+
+            // frame and coloured caps
+            gBoxes.push(box.new(gx, rTop, gx2, rBot, border_color = color.new(fg, 70), border_width = 1, bgcolor = color(na), force_overlay = true))
+            gLines.push(line.new(gx, rTop, gx2, rTop, color = colPrem, width = 2, force_overlay = true))
+            gLines.push(line.new(gx, rBot, gx2, rBot, color = colDisc, width = 2, force_overlay = true))
+
+            // scale ticks at 25%, 50% and deep on each side
+            gTicks.clear()
+            gTicks.push(0.25)
+            gTicks.push(0.5)
+            if kDeep != 0.5
+                gTicks.push(kDeep)
+            for k in gTicks
+                bool dk = k == kDeep
+                gLines.push(line.new(gx2, eqS + hUp * k, gx2 + 1, eqS + hUp * k, color = dk ? color.new(colPrem, 20) : color.new(fg, 65), width = 1, force_overlay = true))
+                gLines.push(line.new(gx2, eqS - hDn * k, gx2 + 1, eqS - hDn * k, color = dk ? color.new(colDisc, 20) : color.new(fg, 65), width = 1, force_overlay = true))
+
+            // equilibrium and the live needle
+            gLines.push(line.new(gx - 1, eqS, gx2 + 1, eqS, color = color.new(fg, 82), width = 6, force_overlay = true))
+            gLines.push(line.new(gx - 1, eqS, gx2 + 1, eqS, color = fg, width = 2, force_overlay = true))
+            gLines.push(line.new(gx - 1, close, gx2 + 1, close, color = color.new(cSide, 65), width = 7, force_overlay = true))
+            gLines.push(line.new(gx - 1, close, gx2 + 1, close, color = cHot, width = 2, force_overlay = true))
+
+            // readouts: zone at the needle, return rate beside it, EQ and tagged range edges when clear of both
+            gLabels.push(label.new(gx2 + 2, close, (inPrem ? "PREMIUM  " : "DISCOUNT  ") + str.tostring(math.round(pos * 100)) + "%", style = label.style_label_left, color = color.new(cSide, 70), textcolor = pillTxt, size = size.normal, text_formatting = text.format_bold, force_overlay = true))
+
+            float yRet  = na
+            int   bk    = f_bucket(depth)
+            int   n     = totN.get(bk)
+            if depth >= FIG_MIN_DEPTH and n > 0
+                yRet := close - sgn * FIG_OFF * span
+                if math.abs(yRet - eqS) < FIG_EQ_GAP * span
+                    yRet := close + sgn * FIG_OFF * span
+                gLabels.push(label.new(gx2 + 2, yRet, str.tostring(math.round(100.0 * hitN.get(bk) / n)) + "% back to EQ within " + str.tostring(horiz) + " bars · n " + str.tostring(n), style = label.style_label_left, color = color.new(colHi, figLight ? 30 : 88), textcolor = figLight ? #6b5200 : colHi, size = size.small, tooltip = "How often, on this chart, price traded back to the equilibrium level it had when price entered this depth zone, within " + str.tostring(horiz) + " bars · n " + str.tostring(n), force_overlay = true))
+
+            float yEq = na
+            if f_clear(eqS, yRet, span)
+                yEq := eqS
+                gLabels.push(label.new(gx2 + 2, eqS, "EQ  " + str.tostring(eqS, format.mintick), style = label.style_label_left, color = color(na), textcolor = eqTxt, size = size.small, force_overlay = true))
+            if f_clear(rTop, yRet, span) and (na(yEq) or math.abs(rTop - yEq) > CLR_OTHER * span)
+                gLabels.push(label.new(gx2 + 2, rTop, "HIGH  " + str.tostring(rTop, format.mintick), style = label.style_label_left, color = color.new(colPrem, 70), textcolor = pillTxt, size = size.small, text_formatting = text.format_bold, force_overlay = true))
+            if f_clear(rBot, yRet, span) and (na(yEq) or math.abs(rBot - yEq) > CLR_OTHER * span)
+                gLabels.push(label.new(gx2 + 2, rBot, "LOW  " + str.tostring(rBot, format.mintick), style = label.style_label_left, color = color.new(colDisc, 70), textcolor = pillTxt, size = size.small, text_formatting = text.format_bold, force_overlay = true))
+
+// ═══════════════════════ Panel (optional) ═══════════════════════
+tPos = switch tblPos
+    "Top Left"     => position.top_left
+    "Bottom Right" => position.bottom_right
+    "Bottom Left"  => position.bottom_left
+    => position.top_right
+tSz = switch tblSize
+    "Tiny"   => size.tiny
+    "Normal" => size.normal
+    => size.small
+
+var table tbl = na
+
+f_row(int r, string k, string v, color vc) =>
+    tbl.cell(0, r, k, text_color = eqTxt, text_size = tSz, text_halign = text.align_left)
+    tbl.cell(1, r, v, text_color = vc, text_size = tSz, text_halign = text.align_right)
+
+if showTbl and barstate.islast
+    if na(tbl)
+        tbl := table.new(tPos, 2, 8, bgcolor = color.new(chart.bg_color, 8), border_color = color.new(fg, 85), border_width = 1, frame_color = color.new(fg, 70), frame_width = 1, force_overlay = true)
+    tbl.clear(0, 0, 1, 7)
+    tbl.cell(0, 0, "DYNAMIC P&D ZONES · swing " + str.tostring(swLen) + " · " + str.lower(eqStyle) + " · " + str.tostring(horiz) + " bars", bgcolor = colDisc, text_color = f_contrast(f_lum(#0a0b0d), f_lum(colDisc)) >= f_contrast(f_lum(#ffffff), f_lum(colDisc)) ? #0a0b0d : #ffffff, text_size = tSz, text_halign = text.align_left)
+    tbl.merge_cells(0, 0, 1, 0)
+    if hasRange
+        int curBk = f_bucket(depth)
+        f_row(1, "Zone", (inPrem ? "Premium " : "Discount ") + str.tostring(math.round(pos * 100)) + "%", f_cellCol(cSide))
+        f_row(2, "Equilibrium", str.tostring(eqS, format.mintick) + " · " + str.tostring(math.abs(close - eqS) / atr, "0.0") + " ATR", fg)
+        if tblMode == "Compact"
+            f_row(3, "Back to EQ ≤" + str.tostring(horiz), f_rate(curBk), f_cellCol(colHi))
+            f_row(4, "Bars · last", str.tostring(bar_index + 1) + " · " + str.format_time(time, "MM-dd HH:mm", syminfo.timezone), eqTxt)
+        else
+            for k = 0 to 3
+                f_row(3 + k, (k == curBk ? "▶ " : "") + f_bucketTxt(k), f_rate(k), k == curBk ? f_cellCol(colHi) : fg)
+            f_row(7, "Bars · last", str.tostring(bar_index + 1) + " · " + str.format_time(time, "MM-dd HH:mm", syminfo.timezone), eqTxt)
+    else
+        f_row(1, "Zone", "waiting for swings", fg)
+
+
+// ════════════════════════════════════════════════════════════════════════════════
+// Q-TREND
+// ════════════════════════════════════════════════════════════════════════════════
+
+// Inputs
+float  qSrcIn     = input.source(close, "Source", group = "Q-Trend Main settings")
+int    qP         = input.int(200, "Trend period", minval = 1, group = "Q-Trend Main settings", tooltip = "Changes STRONG signals' sensitivity.")
+int    qAtrP      = input.int(14, "ATR Period", minval = 1, group = "Q-Trend Main settings")
+float  qMult      = input.float(0.8, "ATR Multiplier", step = 0.1, group = "Q-Trend Main settings", tooltip = "Changes sensitivity: higher period = higher sensitivty. THECC default: 0.8 (original 1.0).")
+string qMode      = input.string("Type A", "Signal mode", options = ["Type A", "Type B"], group = "Q-Trend Mode")
+string qUseEma    = input.string("No", "Smooth source with EMA?", options = ["Yes", "No"], group = "Q-Trend Source", tooltip = "THECC default: No.")
+int    qEmaP      = input.int(3, "EMA Smoother period", minval = 1, group = "Q-Trend Source")
+bool   qColorBars = input.bool(true, "Color bars?", group = "Q-Trend Addons")
+bool   qShowTl    = input.bool(true, "Show trend line?", group = "Q-Trend Addons")
+string qSigView   = input.string("All", "Signals to show", options = ["All", "Buy/Sell", "Strong", "None"], group = "Q-Trend Signal's Addon")
+string qSigShape  = input.string("Labels", "Signal's shape", options = ["Labels", "Arrows"], group = "Q-Trend Signal's Addon")
+color  qBuyCol    = input.color(color.green, "Buy colour", group = "Q-Trend Signal's Addon", inline = "BS")
+color  qSellCol   = input.color(color.red, "Sell colour", group = "Q-Trend Signal's Addon", inline = "BS")
+
+// Calculations
+float qEmaSrc = ta.ema(qSrcIn, qEmaP)
+float qSrc    = qUseEma == "Yes" ? qEmaSrc : qSrcIn // Source
+
+float qH = ta.highest(qSrc, qP) // Highest of src p-bars back
+float qL = ta.lowest(qSrc, qP)  // Lowest of src p-bars back
+float qD = qH - qL
+
+float qM = (qH + qL) / 2 // Initial trend line
+qM := bar_index > qP ? qM[1] : qM
+
+float qAtr = ta.atr(qAtrP)[1]
+float qEps = qMult * qAtr // Sensitivity band around the trend line
+
+// Both cross types are computed on every bar so their history stays consistent
+bool qCrossUpB = ta.cross(qSrc, qM + qEps)
+bool qCrossUpA = ta.crossover(qSrc, qM + qEps)
+bool qCrossDnB = ta.cross(qSrc, qM - qEps)
+bool qCrossDnA = ta.crossunder(qSrc, qM - qEps)
+bool qChangeUp = (qMode == "Type B" ? qCrossUpB : qCrossUpA) or qSrc > qM + qEps // Price breaks the upper band: move the trend line up
+bool qChangeDn = (qMode == "Type B" ? qCrossDnB : qCrossDnA) or qSrc < qM - qEps // Price breaks the lower band: move the trend line down
+bool qSb = open < qL + qD / 8 and open >= qL
+bool qSs = open > qH - qD / 8 and open <= qH
+bool qStrongBuy  = qSb or qSb[1] or qSb[2] or qSb[3] or qSb[4]
+bool qStrongSell = qSs or qSs[1] or qSs[2] or qSs[3] or qSs[4]
+
+qM := (qChangeUp or qChangeDn) and qM != qM[1] ? qM : qChangeUp ? qM + qEps : qChangeDn ? qM - qEps : nz(qM[1], qM) // Updating the trend line
+
+string qLs = ""
+qLs := qChangeUp ? "B" : qChangeDn ? "S" : qLs[1] // Last signal, avoids repeated labels in a row
+color qColour = qLs == "B" ? qBuyCol : qSellCol    // Trend line colour
+
+bool qBuy  = qChangeUp and qLs[1] != "B"
+bool qSell = qChangeDn and qLs[1] != "S"
+bool qShowBS     = qSigView == "All" or qSigView == "Buy/Sell"
+bool qShowStrong = qSigView == "All" or qSigView == "Strong"
+bool qLabels     = qSigShape == "Labels"
+
+// Plottings
+plot(qShowTl ? qM : na, "Q-Trend trend line", qColour, 3, force_overlay = true)
+
+// Signals (drawn as labels so they don't use up the plot limit)
+bool qShowBuy  = qBuy  and (qStrongBuy  ? qShowStrong : qShowBS)
+bool qShowSell = qSell and (qStrongSell ? qShowStrong : qShowBS)
+if qShowBuy
+    label.new(bar_index, low, qLabels ? (qStrongBuy ? "STRONG" : "BUY") : "", yloc = yloc.belowbar, style = qLabels ? label.style_label_up : label.style_triangleup, color = qColour, textcolor = color.white, size = qLabels ? size.normal : size.tiny, force_overlay = true)
+if qShowSell
+    label.new(bar_index, high, qLabels ? (qStrongSell ? "STRONG" : "SELL") : "", yloc = yloc.abovebar, style = qLabels ? label.style_label_down : label.style_triangledown, color = qColour, textcolor = color.white, size = qLabels ? size.normal : size.tiny, force_overlay = true)
+
+barcolor(colCandles ? cZoneBar : qColorBars ? qColour : na, title = "Bar colour") // P&D zone colours win when switched on, otherwise Q-Trend colours
+
+
+// ════════════════════════════════════════════════════════════════════════════════
+// ADAPTIVE MACD (calculated for the signals; values shown in the Data Window)
+// ════════════════════════════════════════════════════════════════════════════════
+string g_mc   = "Adaptive MACD"
+int    mLen   = input.int(18, "R2 Period", minval = 2, group = g_mc, tooltip = "THECC default: 18 (original 20).")
+int    mFast  = input.int(10, "Fast", minval = 2, group = g_mc)
+int    mSlow  = input.int(20, "Slow", minval = 2, group = g_mc)
+int    mSigLn = input.int(9, "Signal", minval = 2, group = g_mc)
+color  mMacdCol = input.color(#2962FF, "MACD line colour", group = g_mc, tooltip = "THECC default: blue (original: chart text colour).")
+int    mMacdW   = input.int(2, "MACD line thickness", minval = 1, maxval = 4, group = g_mc, tooltip = "THECC default: 2 (original 1).")
+color  mSigCol  = input.color(#ff5d00, "Signal line colour", group = g_mc)
+
+var float mMacd = 0.
+float mA1 = 2.0 / (mFast + 1)
+float mA2 = 2.0 / (mSlow + 1)
+
+float mR2 = .5 * math.pow(ta.correlation(close, bar_index, mLen), 2) + .5
+float mK  = mR2 * ((1 - mA1) * (1 - mA2)) + (1 - mR2) * ((1 - mA1) / (1 - mA2))
+
+mMacd := (close - close[1]) * (mA1 - mA2) + (-mA2 - mA1 + 2) * nz(mMacd[1]) - mK * nz(mMacd[2])
+float mSig  = ta.ema(mMacd, mSigLn)
+float mHist = mMacd - mSig
+
+color mHistCss = mHist > 0 and mHist > mHist[1] ? #5b9cf6
+  : mHist > 0 and mHist < mHist[1] ? color.new(#5b9cf6, 50)
+  : mHist < 0 and mHist < mHist[1] ? #f77c80
+  : color.new(#f77c80, 50)
+
+plot(mHist, "Histogram", mHistCss, 1, plot.style_histogram, display = display.data_window)
+plot(mMacd, "MACD", mMacdCol, mMacdW, display = display.data_window)
+plot(mSig, "Signal", mSigCol, display = display.data_window)
+
+
+// ════════════════════════════════════════════════════════════════════════════════
+// THECC SIGNALS & BRACKET
+// ════════════════════════════════════════════════════════════════════════════════
+bool t_confirmed = not t_nonRepaint or barstate.isconfirmed
+bool t_qtUp      = qLs == "B"
+bool t_strongOnly = t_qtSigs == "Strong only"
+bool t_qBuyLbl   = qBuy and (not t_strongOnly or qStrongBuy)
+bool t_qSellLbl  = qSell and (not t_strongOnly or qStrongSell)
+bool t_macdUp    = not na(mMacd) and not na(mSig) and mMacd > mSig   // blue above orange
+bool t_macdDn    = not na(mMacd) and not na(mSig) and mMacd < mSig   // orange above blue
+bool t_zoneBuy   = not t_zoneFilt or (hasRange and not inPrem)
+bool t_zoneSell  = not t_zoneFilt or (hasRange and inPrem)
+
+// 1) A Q-Trend label opens a setup in its direction
+var int t_pendDir = 0
+var int t_pendBar = na
+if t_confirmed and (t_qBuyLbl or t_qSellLbl)
+    t_pendDir    := t_qBuyLbl ? 1 : -1
+    t_pendBar    := bar_index
+if t_pendDir != 0 and ((t_pendDir == 1) != t_qtUp or bar_index - t_pendBar >= t_confWin)
+    t_pendDir := 0
+
+// 2) Confirmation: MACD lines in the trade direction + candle in the trade direction
+bool t_inDate = not t_useDate or (time >= t_from and time <= t_to)
+bool buySig  = t_confirmed and t_pendDir == 1  and t_macdUp and close > open and t_zoneBuy  and t_inDate and t_dirAllow != 'Short only'
+bool sellSig = t_confirmed and t_pendDir == -1 and t_macdDn and close < open and t_zoneSell and t_inDate and t_dirAllow != 'Long only'
+
+// 3) Stop loss at the previous low (BUY) / previous high (SELL)
+float t_buf    = t_slBufTk * syminfo.mintick
+float t_swLo   = ta.lowest(low, t_swingLen)
+float t_swHi   = ta.highest(high, t_swingLen)
+float t_buySl  = (t_slMode == 'Previous swing' ? t_swLo : low[1]) - t_buf
+float t_sellSl = (t_slMode == 'Previous swing' ? t_swHi : high[1]) + t_buf
+buySig  := buySig  and not na(t_buySl)  and t_buySl  < close
+sellSig := sellSig and not na(t_sellSl) and t_sellSl > close
+if buySig or sellSig
+    t_pendDir := 0
+
+// ── Trade state ──
+var int   t_dir     = 0
+var float t_entry   = na
+var float t_sl      = na
+var float t_tp      = na
+var float t_risk    = na
+var int   t_entBar  = na
+var box   t_tpBox   = na
+var box   t_slBox   = na
+var line  t_entLn   = na
+var array<float> t_results = array.new_float(0)   // closed trade results in R
+
+f_closeDraw(int x) =>
+    if not na(t_tpBox)
+        box.set_right(t_tpBox, x)
+    if not na(t_slBox)
+        box.set_right(t_slBox, x)
+    if not na(t_entLn)
+        line.set_x2(t_entLn, x)
+
+f_resultLbl(float px, float r, bool above) =>
+    if t_showRes
+        string txt = (r > 0 ? '✓ ' : '✗ ') + (r >= 0 ? '+' : '') + str.tostring(r, '0.00') + 'R'
+        label.new(bar_index, px, txt, style = above ? label.style_label_down : label.style_label_up, color = color.new(r > 0 ? #00897B : #F23645, 10), textcolor = color.white, size = size.small, force_overlay = true)
+
+// 4) SL / TP exit check on the open trade (SL assumed first if both are touched)
+bool tpHit = false
+bool slHit = false
+if t_dir != 0 and t_confirmed and bar_index > t_entBar
+    bool onClose = t_exitMode == 'Close'
+    slHit := onClose ? (t_dir == 1 ? close <= t_sl : close >= t_sl) : (t_dir == 1 ? low <= t_sl : high >= t_sl)
+    tpHit := not slHit and (onClose ? (t_dir == 1 ? close >= t_tp : close <= t_tp) : (t_dir == 1 ? high >= t_tp : low <= t_tp))
+    if slHit or tpHit
+        float exitPx = onClose ? close : slHit ? t_sl : t_tp
+        if onClose
+            strategy.close_all(comment = tpHit ? 'TP' : 'SL')
+        float r = (exitPx - t_entry) * t_dir / t_risk
+        array.push(t_results, r)
+        f_closeDraw(bar_index)
+        f_resultLbl(exitPx, r, t_dir == 1 ? tpHit : slHit)
+        t_dir := 0
+    else if not na(t_tpBox) and box.get_right(t_tpBox) <= bar_index
+        f_closeDraw(bar_index + 1)
+
+// 5) Opposite signal closes the open trade
+if t_dir != 0 and t_closeOpp and ((buySig and t_dir == -1) or (sellSig and t_dir == 1))
+    float r = (close - t_entry) * t_dir / t_risk
+    array.push(t_results, r)
+    f_closeDraw(bar_index)
+    f_resultLbl(close, r, t_dir == 1)
+    strategy.close_all(comment = 'Opposite')
+    t_dir := 0
+
+// 6) Open the new trade and draw the bracket
+bool newBuy  = buySig  and t_dir == 0
+bool newSell = sellSig and t_dir == 0
+if newBuy or newSell
+    t_dir    := newBuy ? 1 : -1
+    t_entry  := close
+    t_sl     := newBuy ? t_buySl : t_sellSl
+    t_risk   := math.abs(t_entry - t_sl)
+    t_tp     := t_entry + t_dir * t_risk * t_rr
+    t_entBar := bar_index
+    float qty = t_qtyMode == 'Risk % of equity' ? strategy.equity * t_riskPct / 100 / (t_risk * syminfo.pointvalue) : na
+    if t_wholeQty and not na(qty)
+        qty := math.floor(qty)
+    string id = newBuy ? 'Long' : 'Short'
+    if na(qty) or qty > 0
+        strategy.entry(id, newBuy ? strategy.long : strategy.short, qty = qty, comment = newBuy ? 'THECC BUY' : 'THECC SELL')
+        if t_exitMode == 'Wick'
+            strategy.exit(id + ' TP/SL', id, stop = t_sl, limit = t_tp, comment_loss = 'SL', comment_profit = 'TP')
+    else
+        t_dir := 0
+    t_tpBox  := na
+    t_slBox  := na
+    t_entLn  := na
+    if t_showBrk and t_dir != 0
+        int x2 = bar_index + t_brkLen
+        t_tpBox := box.new(bar_index, math.max(t_entry, t_tp), x2, math.min(t_entry, t_tp), border_color = color.new(t_tpCol, 40), bgcolor = t_tpCol, text = 'TP ' + str.tostring(t_tp, format.mintick) + '  (1:' + str.tostring(t_rr, '0.0#') + ')', text_size = size.small, text_color = color.new(#00838F, 0), text_halign = text.align_right, text_valign = newBuy ? text.align_top : text.align_bottom, force_overlay = true)
+        t_slBox := box.new(bar_index, math.max(t_entry, t_sl), x2, math.min(t_entry, t_sl), border_color = color.new(t_slCol, 40), bgcolor = t_slCol, text = 'SL ' + str.tostring(t_sl, format.mintick), text_size = size.small, text_color = color.new(#C62828, 0), text_halign = text.align_right, text_valign = newBuy ? text.align_bottom : text.align_top, force_overlay = true)
+        t_entLn := line.new(bar_index, t_entry, x2, t_entry, color = t_entryCol, width = 2, force_overlay = true)
+
+// ── Signal labels (set one ATR beyond the candle so they clear the Q-Trend labels) ──
+if t_showSig and newBuy and t_dir == 1
+    label.new(bar_index, low - atr, 'THECC\nBUY', style = label.style_label_up, color = t_buyCol, textcolor = color.white, size = size.small, force_overlay = true)
+if t_showSig and newSell and t_dir == -1
+    label.new(bar_index, high + atr, 'THECC\nSELL', style = label.style_label_down, color = t_sellCol, textcolor = color.white, size = size.small, force_overlay = true)
+
+// ── THECC logo watermark ──
+f_pos(string p) =>
+    switch p
+        'Top Left'      => position.top_left
+        'Top Center'    => position.top_center
+        'Middle Left'   => position.middle_left
+        'Middle Center' => position.middle_center
+        'Middle Right'  => position.middle_right
+        'Bottom Left'   => position.bottom_left
+        'Bottom Center' => position.bottom_center
+        'Bottom Right'  => position.bottom_right
+        => position.top_right
+
+var table t_logo = t_showLogo ? table.new(f_pos(t_logoPos), 1, 2, force_overlay = true) : na
+if t_showLogo and barstate.islast
+    table.cell(t_logo, 0, 0, 'THECC', text_color = color.new(t_brandCol, t_logoTransp), text_size = size.huge, text_halign = text.align_center)
+    table.cell(t_logo, 0, 1, 'THECC AI Coach  •  Q-Trend + P&D Zones + Adaptive MACD  •  Backtest', text_color = color.new(color.gray, t_logoTransp), text_size = size.small, text_halign = text.align_center)
+
+// ── THECC panel ──
+color t_bg    = color.new(#0B1F3A, 0)
+color t_green = color.new(#2ce433, 0)
+color t_red   = color.new(#ff5252, 0)
+var table t_panel = t_showPanel ? table.new(f_pos(t_panelPos), 2, 15, bgcolor = color.new(#131722, 10), frame_color = color.new(t_brandCol, 30), frame_width = 1, border_color = color.new(color.gray, 60), border_width = 1, force_overlay = true) : na
+
+f_prow(int r, string k, string v, color vc) =>
+    table.cell(t_panel, 0, r, k, text_color = color.white, text_halign = text.align_left, text_size = getSize(t_panelSize))
+    table.cell(t_panel, 1, r, v, text_color = vc, text_halign = text.align_right, text_size = getSize(t_panelSize))
+
+if t_showPanel and barstate.isfirst
+    table.merge_cells(t_panel, 0, 0, 1, 0)
+    table.merge_cells(t_panel, 0, 1, 1, 1)
+    table.merge_cells(t_panel, 0, 8, 1, 8)
+    table.merge_cells(t_panel, 0, 14, 1, 14)
+
+if t_showPanel and barstate.islast
+    int n = array.size(t_results)
+    int wins = 0
+    float netR = 0.0
+    if n > 0
+        for i = 0 to n - 1
+            float r = array.get(t_results, i)
+            netR += r
+            if r > 0
+                wins += 1
+    string setupTxt = t_pendDir == 1 ? 'BUY - awaiting MACD + bullish candle' : t_pendDir == -1 ? 'SELL - awaiting MACD + bearish candle' : t_dir == 1 ? 'In LONG' : t_dir == -1 ? 'In SHORT' : 'Waiting for Q-Trend label'
+    string slTxt = t_slMode == 'Previous swing' ? 'Prev. high/low (' + str.tostring(t_swingLen) + ')' : 'Prev. candle'
+
+    table.cell(t_panel, 0, 0, 'THECC', text_color = t_brandCol, bgcolor = t_bg, text_halign = text.align_center, text_size = size.large)
+    table.cell(t_panel, 0, 1, 'Q-TREND + P&D + ADAPTIVE MACD · BACKTEST', text_color = color.white, bgcolor = color.new(#3B5B92, 0), text_halign = text.align_center, text_size = getSize(t_panelSize))
+    f_prow(2, 'Q-Trend', t_qtUp ? 'BUY trend' : 'SELL trend', t_qtUp ? qBuyCol : qSellCol)
+    f_prow(3, 'MACD vs Signal', na(mMacd) or na(mSig) ? 'n/a' : t_macdUp ? 'Blue above ▲' : 'Orange above ▼', na(mMacd) or na(mSig) ? color.white : t_macdUp ? t_green : t_red)
+    f_prow(4, 'P&D Zone', hasRange ? (inPrem ? 'Premium ' : 'Discount ') + str.tostring(math.round(pos * 100)) + '%' : 'waiting', hasRange ? cSide : color.white)
+    f_prow(5, 'Setup', setupTxt, t_pendDir == 1 or (t_pendDir == 0 and t_dir == 1) ? t_green : t_pendDir == -1 or (t_pendDir == 0 and t_dir == -1) ? t_red : color.white)
+    f_prow(6, 'Stop Loss', slTxt, color.white)
+    f_prow(7, 'Risk : Reward', '1 : ' + str.tostring(t_rr, '0.0#'), color.white)
+    table.cell(t_panel, 0, 8, 'PERFORMANCE', text_color = color.white, bgcolor = color.new(#3B5B92, 0), text_halign = text.align_center, text_size = getSize(t_panelSize))
+    int   nT   = strategy.closedtrades
+    float wr   = nT > 0 ? strategy.wintrades * 100.0 / nT : na
+    float posQ = strategy.position_size
+    f_prow(9, 'Closed Trades', str.tostring(nT), color.white)
+    f_prow(10, 'Wins / Losses', str.tostring(strategy.wintrades) + ' / ' + str.tostring(strategy.losstrades), color.white)
+    f_prow(11, 'Win Rate · Net R', (nT > 0 ? str.tostring(wr, '0') + '%' : 'n/a') + ' · ' + (n > 0 ? (netR >= 0 ? '+' : '') + str.tostring(netR, '0.0') + 'R' : 'n/a'), netR >= 0 ? t_green : t_red)
+    f_prow(12, 'Net Profit · Max DD', str.tostring(strategy.netprofit, '#,##0.00') + ' · ' + str.tostring(strategy.max_drawdown, '#,##0.00') + ' ' + strategy.account_currency, strategy.netprofit >= 0 ? t_green : t_red)
+    f_prow(13, 'Open Position', posQ == 0 ? 'none' : (posQ > 0 ? 'LONG ' : 'SHORT ') + str.tostring(strategy.openprofit, '#,##0.00'), posQ == 0 ? color.white : strategy.openprofit >= 0 ? t_green : t_red)
+    table.cell(t_panel, 0, 14, 'THECC AI Coach • Educational only. Not financial advice.', text_color = color.new(t_brandCol, 20), bgcolor = t_bg, text_halign = text.align_center, text_size = size.tiny)
+
+
+// ════════════════════════════════════════════════════════════════════════════════
+// ALERTS (create an alert on this strategy and pick "alert() function calls only" or "Order fills")
+// ════════════════════════════════════════════════════════════════════════════════
+if newBuy
+    alert('THECC BUY on ' + syminfo.ticker + ' ' + timeframe.period + ' · entry ' + str.tostring(t_entry, format.mintick) + ' · SL ' + str.tostring(t_sl, format.mintick) + ' · TP ' + str.tostring(t_tp, format.mintick), alert.freq_once_per_bar_close)
+if newSell
+    alert('THECC SELL on ' + syminfo.ticker + ' ' + timeframe.period + ' · entry ' + str.tostring(t_entry, format.mintick) + ' · SL ' + str.tostring(t_sl, format.mintick) + ' · TP ' + str.tostring(t_tp, format.mintick), alert.freq_once_per_bar_close)

@@ -71,3 +71,12 @@ THECC signals show as **THECC BUY / THECC SELL** labels, one ATR beyond the cand
 Alerts: THECC Buy, THECC Sell, THECC Signal, Take Profit Hit, Stop Loss Hit, plus all of the original Q-Trend and Premium & Discount alerts.
 
 *THECC AI Coach. For education only, not financial advice.*
+
+## Strategy version (backtesting)
+`THECC_QTrend_PD_MACD_Strategy.pine` uses the same signals and bracket but runs as a TradingView **strategy**, so results show in the **Strategy Tester**.
+- Orders fill at the close of the signal candle. SL/TP are stop/limit orders at the bracket levels (or market closes when *Exit trigger* is *Close*). An opposite signal reverses the trade.
+- **Position size:** risk 1% of equity per trade by default (*THECC Backtest → Risk per trade*), or switch to *Strategy properties* to use the Properties tab order size.
+- Optional *Trade direction* (long/short only) and *date range* filters.
+- Commission and slippage default to 0; set them on the Properties tab for realistic results.
+- The MACD lines are hidden in the strategy (they would squash the price scale). Their values are still in the Data Window. Add the indicator version alongside to see the MACD pane.
+- Alerts: create an alert on the strategy and pick *alert() function calls only* (THECC BUY/SELL with entry, SL and TP) or *Order fills*.
