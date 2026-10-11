@@ -74,13 +74,13 @@ eqLen   = input.int(6, "Smoothing", minval = 2, maxval = 30, group = grpR, toolt
 
 grpG = "P&D Glow"
 glowAmt = input.int(30, "Glow at candles", minval = 0, maxval = 100, group = grpG, tooltip = "Opacity of the translucent base glow where it reaches the candles. It runs to the middle of each candle body, behind the candle, and fades out at the 50% line. Brightness also scales with how deep price is in its zone.")
-midAmt  = input.int(10, "Mid layers", minval = 0, maxval = 100, group = grpG, tooltip = "Two translucent layers starting 35% and 65% of the way to the candles, so the glow builds smoothly toward them. 0 turns them off.")
+midAmt  = input.int(10, "Mid layer", minval = 0, maxval = 100, group = grpG, tooltip = "Translucent layer starting halfway to the candles, so the glow builds toward them. 0 turns it off.")
 coreAmt = input.int(15, "Core glow", minval = 0, maxval = 100, group = grpG, tooltip = "Lighter layer over the 15% of the glow closest to the candles, so each candle looks lit from behind. 0 turns it off.")
 hotAmt  = input.int(20, "Deep-zone heat", minval = 0, maxval = 100, group = grpG, tooltip = "White-hot layer between the deep line and the candle, shown only on bars that close in deep premium or deep discount. 0 turns it off.")
 
 grpD = "P&D Detail"
 showCont   = input.bool(true, "Depth contours", group = grpD, tooltip = "Faint lines at 25% and 50% depth and a brighter deep line, drawn only inside the glow, so you can see how far into its zone price has travelled.")
-showCross  = input.bool(true, "Equilibrium crosses", group = grpD, tooltip = "A haloed dot on the 50% line on each bar that closes across it. On very low timeframes price crosses often; switch this off if the line looks busy.")
+showCross  = input.bool(true, "Equilibrium crosses", group = grpD, tooltip = "A dot on the 50% line on each bar that closes across it. On very low timeframes price crosses often; switch this off if the line looks busy.")
 colCandles = input.bool(false, "Colour candles by zone", group = grpD, tooltip = "Colours every candle in the zone it closes in: premium colour above equilibrium, discount colour below. Overrides the Q-Trend bar colours while on. Off by default.")
 heatCnd    = input.bool(true, "Heat deep candles", group = grpD, tooltip = "With zone colouring on, candles that close in deep premium or deep discount are drawn in a lighter, white-hot version of the zone colour.")
 dnStyle    = input.string("Same colour", "Down candles", options = ["Same colour", "Dimmer"], group = grpD, tooltip = "With zone colouring on: Same colour keeps every candle in the zone colour, Dimmer blends down-candle bodies 30% toward the chart background so direction stays readable.")
@@ -199,8 +199,7 @@ float farEnd  = inPrem ? math.max(bodyMid, eqS) : math.min(bodyMid, eqS)
 float glowLen = farEnd - eqS
 bool  glowOn  = hasRange and math.abs(glowLen) > syminfo.mintick * 0.25
 float bright  = hasRange ? 0.45 + 0.55 * math.sqrt(depth) : 0.0
-float y35     = eqS + glowLen * 0.35
-float y65     = eqS + glowLen * 0.65
+float y50     = eqS + glowLen * 0.50
 float y85     = eqS + glowLen * 0.85
 
 f_tr(int amt) =>
@@ -211,13 +210,11 @@ color cM = color.new(cSide, f_tr(midAmt))
 color cC = color.new(cLit, f_tr(coreAmt))
 
 gBase = plot(glowOn ? eqS : na, "Glow base", color = color(na), style = eqPlotStyle, editable = false, display = display.none, force_overlay = true)
-g35   = plot(glowOn ? y35 : na, "Glow layer 2 anchor", color = color(na), style = eqPlotStyle, editable = false, display = display.none, force_overlay = true)
-g65   = plot(glowOn ? y65 : na, "Glow layer 3 anchor", color = color(na), style = eqPlotStyle, editable = false, display = display.none, force_overlay = true)
+g50   = plot(glowOn ? y50 : na, "Glow mid anchor", color = color(na), style = eqPlotStyle, editable = false, display = display.none, force_overlay = true)
 gCore = plot(glowOn ? y85 : na, "Glow core anchor", color = color(na), style = eqPlotStyle, editable = false, display = display.none, force_overlay = true)
 gEnd  = plot(glowOn ? farEnd : na, "Glow end", color = color(na), style = plot.style_linebr, editable = false, display = display.none, force_overlay = true)
 fill(gBase, gEnd, math.max(eqS, farEnd), math.min(eqS, farEnd), inPrem ? cB : cClear, inPrem ? cClear : cB, "Glow", editable = false)
-fill(g35, gEnd, math.max(y35, farEnd), math.min(y35, farEnd), inPrem ? cM : cClear, inPrem ? cClear : cM, "Glow layer 2", editable = false)
-fill(g65, gEnd, math.max(y65, farEnd), math.min(y65, farEnd), inPrem ? cM : cClear, inPrem ? cClear : cM, "Glow layer 3", editable = false)
+fill(g50, gEnd, math.max(y50, farEnd), math.min(y50, farEnd), inPrem ? cM : cClear, inPrem ? cClear : cM, "Glow mid", editable = false)
 fill(gCore, gEnd, math.max(y85, farEnd), math.min(y85, farEnd), inPrem ? cC : cClear, inPrem ? cClear : cC, "Glow core", editable = false)
 
 // ═══════════════════════ Depth contours + deep-zone heat (inside the glow only) ═══════════════════════
@@ -244,7 +241,7 @@ plot(showCont ? cDp : na, "Deep line", color = color.new(cHot, 40), linewidth = 
 // ═══════════════════════ Candles by zone (optional) ═══════════════════════
 color cCnd   = heatCnd and isDeep ? cHot : cSide
 color cDnBar = dnStyle == "Dimmer" ? color.from_gradient(30, 0, 100, cCnd, chart.bg_color) : cCnd
-barcolor(colCandles and hasRange ? (close >= open ? cCnd : cDnBar) : na, title = "Zone candles", editable = false)
+color cZoneBar = colCandles and hasRange ? (close >= open ? cCnd : cDnBar) : na
 
 // ═══════════════════════ Equilibrium ═══════════════════════
 plot(hasRange ? eqS : na, "Equilibrium zone glow", color = color.new(cSide, 85), linewidth = 10, style = eqPlotStyle, editable = false, display = display.pane, force_overlay = true)
@@ -255,7 +252,6 @@ bool xUp    = ta.crossover(close, eqS)
 bool xDn    = ta.crossunder(close, eqS)
 bool xEq    = ta.cross(close, eqS)
 bool xShown = showCross and hasRange and xEq and barstate.isconfirmed
-plot(xShown ? eqS : na, "Cross halo", color = color.new(fg, 70), linewidth = 10, style = plot.style_circles, editable = false, display = display.pane, force_overlay = true)
 plot(xShown ? eqS : na, "Equilibrium cross", color = fg, linewidth = 4, style = plot.style_circles, editable = false, display = display.pane, force_overlay = true)
 
 // ═══════════════════════ Return rate and round trips (bar close only) ═══════════════════════
@@ -557,19 +553,15 @@ bool qLabels     = qSigShape == "Labels"
 // Plottings
 plot(qShowTl ? qM : na, "Q-Trend trend line", qColour, 3, force_overlay = true)
 
-// Signals with label shape
-plotshape(qLabels and qShowBS and qBuy and not qStrongBuy, "Q-Trend Buy signal", style = shape.labelup, location = location.belowbar, color = qColour, size = size.normal, text = "BUY", textcolor = color.white, force_overlay = true)
-plotshape(qLabels and qShowBS and qSell and not qStrongSell, "Q-Trend Sell signal", style = shape.labeldown, location = location.abovebar, color = qColour, size = size.normal, text = "SELL", textcolor = color.white, force_overlay = true)
-plotshape(qLabels and qShowStrong and qBuy and qStrongBuy, "Q-Trend Strong Buy signal", style = shape.labelup, location = location.belowbar, color = qColour, size = size.normal, text = "STRONG", textcolor = color.white, force_overlay = true)
-plotshape(qLabels and qShowStrong and qSell and qStrongSell, "Q-Trend Strong Sell signal", style = shape.labeldown, location = location.abovebar, color = qColour, size = size.normal, text = "STRONG", textcolor = color.white, force_overlay = true)
+// Signals (drawn as labels so they don't use up the plot limit)
+bool qShowBuy  = qBuy  and (qStrongBuy  ? qShowStrong : qShowBS)
+bool qShowSell = qSell and (qStrongSell ? qShowStrong : qShowBS)
+if qShowBuy
+    label.new(bar_index, low, qLabels ? (qStrongBuy ? "STRONG" : "BUY") : "", yloc = yloc.belowbar, style = qLabels ? label.style_label_up : label.style_triangleup, color = qColour, textcolor = color.white, size = qLabels ? size.normal : size.tiny, force_overlay = true)
+if qShowSell
+    label.new(bar_index, high, qLabels ? (qStrongSell ? "STRONG" : "SELL") : "", yloc = yloc.abovebar, style = qLabels ? label.style_label_down : label.style_triangledown, color = qColour, textcolor = color.white, size = qLabels ? size.normal : size.tiny, force_overlay = true)
 
-// Signals with arrow shape
-plotshape(not qLabels and qShowBS and qBuy and not qStrongBuy, "Q-Trend Buy arrow", style = shape.triangleup, location = location.belowbar, color = qColour, size = size.tiny, force_overlay = true)
-plotshape(not qLabels and qShowBS and qSell and not qStrongSell, "Q-Trend Sell arrow", style = shape.triangledown, location = location.abovebar, color = qColour, size = size.tiny, force_overlay = true)
-plotshape(not qLabels and qShowStrong and qBuy and qStrongBuy, "Q-Trend Strong Buy arrow", style = shape.triangleup, location = location.belowbar, color = qColour, size = size.tiny, force_overlay = true)
-plotshape(not qLabels and qShowStrong and qSell and qStrongSell, "Q-Trend Strong Sell arrow", style = shape.triangledown, location = location.abovebar, color = qColour, size = size.tiny, force_overlay = true)
-
-barcolor(qColorBars and not colCandles ? qColour : na, title = "Q-Trend bar colour") // Bar colouring (P&D zone colours win when switched on)
+barcolor(colCandles ? cZoneBar : qColorBars ? qColour : na, title = "Bar colour") // P&D zone colours win when switched on, otherwise Q-Trend colours
 
 
 // ════════════════════════════════════════════════════════════════════════════════
@@ -712,8 +704,10 @@ if newBuy or newSell
         t_entLn := line.new(bar_index, t_entry, x2, t_entry, color = t_entryCol, width = 2, force_overlay = true)
 
 // ── Signal labels (set one ATR beyond the candle so they clear the Q-Trend labels) ──
-plotshape(t_showSig and newBuy  ? low  - atr : na, 'THECC BUY',  shape.labelup,   location.absolute, t_buyCol,  text = 'THECC\nBUY',  textcolor = color.white, size = size.small, force_overlay = true)
-plotshape(t_showSig and newSell ? high + atr : na, 'THECC SELL', shape.labeldown, location.absolute, t_sellCol, text = 'THECC\nSELL', textcolor = color.white, size = size.small, force_overlay = true)
+if t_showSig and newBuy
+    label.new(bar_index, low - atr, 'THECC\nBUY', style = label.style_label_up, color = t_buyCol, textcolor = color.white, size = size.small, force_overlay = true)
+if t_showSig and newSell
+    label.new(bar_index, high + atr, 'THECC\nSELL', style = label.style_label_down, color = t_sellCol, textcolor = color.white, size = size.small, force_overlay = true)
 
 // ── THECC logo watermark ──
 f_pos(string p) =>
