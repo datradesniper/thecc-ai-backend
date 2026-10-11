@@ -48,3 +48,12 @@ Every trade has a **fixed cost per contract** (default **$5.00** round turn, **1
 Alerts: THECC Buy, THECC Sell, Take Profit Hit, Stop Loss Hit, plus all of the original MOM alerts.
 
 *THECC AI Coach. For education only, not financial advice.*
+
+## Backtest on your own chart (strategy version)
+`THECC_Supertrend_MOM_Strategy.pine` is the same script declared as a **strategy**. Add it to the chart and open **Strategy Tester** to get TradingView's own backtest of the exact BUY/SELL signals and brackets on that chart.
+- Entries fill at the signal candle's close. The SL and TP are stop/limit orders. Each trade is 1 contract.
+- Commission is **$2.50 per contract per side = $5.00 round turn**. Change it in the strategy's *Properties* tab.
+- **Trade sessions** = *Premarket only* or *NY Regular only* makes the Strategy Tester report one session on its own. Run it once with each setting, on each timeframe.
+- Set *Last N trades per session* to 500 to make the on-chart session table cover 500 trades.
+- How much history you get depends on your TradingView plan. Turn on **Deep Backtesting** in Strategy Tester (Premium and above) to test beyond the loaded bars.
+- The strategy version has no alerts, because TradingView doesn't allow `alertcondition` in strategies. Use the indicator version for alerts.
