@@ -87,33 +87,116 @@ showMarks = input.bool(true, "Event markers on chart", group = grpK)
 grpA = "Alerts"
 alertDyn = input.bool(true, "Detailed alert() messages (use 'Any alert() function call')", group = grpA)
 
-grpV = "Display"
-showZone  = input.bool(true,  "Entry zone",     group = grpV)
-showEntry = input.bool(true,  "Entry",          group = grpV)
-showStop  = input.bool(true,  "Stop",           group = grpV)
-showTPs   = input.bool(true,  "Targets",        group = grpV)
-showSess  = input.bool(true,  "Session levels", group = grpV)
-showLbls  = input.bool(true,  "Labels",         group = grpV)
-lblOffset = input.int(12, "Label offset (bars)", minval = 1, maxval = 100, group = grpV)
+// ── APPEARANCE ───────────────────────────────────────────────────────────────
+// Every visual is an input. Each level row reads: show • color • width • style.
+SOPT = "Line"
+grpL = "Levels  (show • color • width • style)"
+showZone  = input.bool(true, "Zone edges", inline = "zn", group = grpL)
+cZoneLn   = input.color(color.new(#2962FF, 0), "", inline = "zn", group = grpL)
+wZone     = input.int(1, "", minval = 1, maxval = 10, inline = "zn", group = grpL)
+sZone     = input.string(SOPT, "", options = ["Line", "Step", "Circles", "Cross"], inline = "zn", group = grpL)
+showFill  = input.bool(true, "Zone fill", inline = "zf", group = grpL)
+cZone     = input.color(color.new(#2962FF, 88), "", inline = "zf", group = grpL)
+showEntry = input.bool(true, "Entry", inline = "en", group = grpL)
+cEntry    = input.color(color.new(#2962FF, 0), "", inline = "en", group = grpL)
+wEntry    = input.int(2, "", minval = 1, maxval = 10, inline = "en", group = grpL)
+sEntry    = input.string(SOPT, "", options = ["Line", "Step", "Circles", "Cross"], inline = "en", group = grpL)
+showStop  = input.bool(true, "Stop", inline = "st", group = grpL)
+cStop     = input.color(color.new(#FF3B30, 0), "", inline = "st", group = grpL)
+wStop     = input.int(2, "", minval = 1, maxval = 10, inline = "st", group = grpL)
+sStop     = input.string(SOPT, "", options = ["Line", "Step", "Circles", "Cross"], inline = "st", group = grpL)
+showTP1   = input.bool(true, "TP1", inline = "t1", group = grpL)
+cTP1      = input.color(color.new(#00C853, 0), "", inline = "t1", group = grpL)
+wTP1      = input.int(1, "", minval = 1, maxval = 10, inline = "t1", group = grpL)
+sTP1      = input.string(SOPT, "", options = ["Line", "Step", "Circles", "Cross"], inline = "t1", group = grpL)
+showTP2   = input.bool(true, "TP2", inline = "t2", group = grpL)
+cTP2      = input.color(color.new(#00C853, 0), "", inline = "t2", group = grpL)
+wTP2      = input.int(1, "", minval = 1, maxval = 10, inline = "t2", group = grpL)
+sTP2      = input.string(SOPT, "", options = ["Line", "Step", "Circles", "Cross"], inline = "t2", group = grpL)
+showTP3   = input.bool(true, "TP3", inline = "t3", group = grpL)
+cTP3      = input.color(color.new(#00C853, 0), "", inline = "t3", group = grpL)
+wTP3      = input.int(1, "", minval = 1, maxval = 10, inline = "t3", group = grpL)
+sTP3      = input.string(SOPT, "", options = ["Line", "Step", "Circles", "Cross"], inline = "t3", group = grpL)
+showSH    = input.bool(true, "Session high", inline = "sh", group = grpL)
+cSH       = input.color(color.new(#9E9E9E, 0), "", inline = "sh", group = grpL)
+wSH       = input.int(1, "", minval = 1, maxval = 10, inline = "sh", group = grpL)
+sSH       = input.string(SOPT, "", options = ["Line", "Step", "Circles", "Cross"], inline = "sh", group = grpL)
+showSM    = input.bool(true, "Session mid", inline = "sm", group = grpL)
+cSM       = input.color(color.new(#9E9E9E, 0), "", inline = "sm", group = grpL)
+wSM       = input.int(1, "", minval = 1, maxval = 10, inline = "sm", group = grpL)
+sSM       = input.string(SOPT, "", options = ["Line", "Step", "Circles", "Cross"], inline = "sm", group = grpL)
+showSL    = input.bool(true, "Session low", inline = "sl", group = grpL)
+cSL       = input.color(color.new(#9E9E9E, 0), "", inline = "sl", group = grpL)
+wSL       = input.int(1, "", minval = 1, maxval = 10, inline = "sl", group = grpL)
+sSL       = input.string(SOPT, "", options = ["Line", "Step", "Circles", "Cross"], inline = "sl", group = grpL)
+lvlFrom   = input.string("Full chart", "Draw levels from", options = ["Full chart", "Plan window start"], group = grpL)
 
-grpC = "Colors"
-cEntry = input.color(color.new(#2962FF, 0),  "Entry / zone", group = grpC)
-cZone  = input.color(color.new(#2962FF, 88), "Zone fill",    group = grpC)
-cStop  = input.color(color.new(#FF3B30, 0),  "Stop",         group = grpC)
-cTP    = input.color(color.new(#00C853, 0),  "Targets",      group = grpC)
-cSess  = input.color(color.new(#9E9E9E, 0),  "Session",      group = grpC)
-lw     = input.int(1, "Line width", minval = 1, maxval = 4, group = grpC)
+grpB = "Labels"
+showLbls  = input.bool(true, "Show labels", group = grpB)
+lblPrice  = input.bool(true, "Show price in label", group = grpB)
+lblStyle  = input.string("Box", "Label style", options = ["Box", "Text only"], group = grpB)
+lblSz     = input.string("Small", "Label size", options = ["Tiny", "Small", "Normal", "Large", "Huge"], group = grpB)
+lblTxtC   = input.color(color.white, "Box text color", group = grpB)
+lblTransp = input.int(15, "Box transparency", minval = 0, maxval = 100, group = grpB)
+lblOffset = input.int(12, "Label offset (bars)", minval = 0, maxval = 500, group = grpB)
+
+grpN = "Label text"
+nZoneLo = input.string("ZONE LOW",  "Zone low",     group = grpN)
+nZoneHi = input.string("ZONE HIGH", "Zone high",    group = grpN)
+nEntry  = input.string("ENTRY",     "Entry",        group = grpN)
+nStop   = input.string("STOP",      "Stop",         group = grpN)
+nTP1    = input.string("TP1",       "TP1",          group = grpN)
+nTP2    = input.string("TP2",       "TP2",          group = grpN)
+nTP3    = input.string("TP3",       "TP3",          group = grpN)
+nSH     = input.string("SESS HIGH", "Session high", group = grpN)
+nSM     = input.string("SESS MID",  "Session mid",  group = grpN)
+nSL     = input.string("SESS LOW",  "Session low",  group = grpN)
+
+grpM = "Event markers"
+mkEntry = input.bool(true, "Entry filled", inline = "mk", group = grpM)
+mkStop  = input.bool(true, "Stop hit",     inline = "mk", group = grpM)
+mkTPs   = input.bool(true, "Targets hit",  inline = "mk", group = grpM)
 
 grpT = "Status table"
-posSel = input.string("Top Right", "Position", options = ["Top Left", "Top Center", "Top Right", "Middle Left", "Middle Center", "Middle Right", "Bottom Left", "Bottom Center", "Bottom Right"], group = grpT)
-txtSz  = input.string("Normal", "Text size", options = ["Tiny", "Small", "Normal", "Large"], group = grpT)
-cHdrBg = input.color(color.new(#1E3A8A, 0),  "Header bg",  group = grpT)
-cRowBg = input.color(color.new(#111111, 25), "Row bg",     group = grpT)
-cTxt   = input.color(color.white,            "Text",       group = grpT)
-cOk    = input.color(color.new(#00C853, 0),  "OK bg",      group = grpT)
-cBad   = input.color(color.new(#FF3B30, 0),  "Error bg",   group = grpT)
-cWarn  = input.color(color.new(#FF9800, 0),  "Warning bg", group = grpT)
-cInfo  = input.color(color.new(#2962FF, 0),  "Active bg",  group = grpT)
+showTbl = input.bool(true, "Show status table", group = grpT)
+posSel  = input.string("Top Right", "Position", options = ["Top Left", "Top Center", "Top Right", "Middle Left", "Middle Center", "Middle Right", "Bottom Left", "Bottom Center", "Bottom Right"], group = grpT)
+txtSz   = input.string("Normal", "Text size", options = ["Tiny", "Small", "Normal", "Large", "Huge", "Auto"], group = grpT)
+tblTitle = input.string("TCC TradeOS v2", "Title", group = grpT)
+cHdrBg  = input.color(color.new(#1E3A8A, 0),  "Header bg",   group = grpT)
+cHdrTxt = input.color(color.white,            "Header text", group = grpT)
+cRowBg  = input.color(color.new(#111111, 25), "Row bg",      group = grpT)
+cTxt    = input.color(color.white,            "Text",        group = grpT)
+cOk     = input.color(color.new(#00C853, 0),  "OK bg",       group = grpT)
+cBad    = input.color(color.new(#FF3B30, 0),  "Error bg",    group = grpT)
+cWarn   = input.color(color.new(#FF9800, 0),  "Warning bg",  group = grpT)
+cInfo   = input.color(color.new(#2962FF, 0),  "Active bg",   group = grpT)
+cBorder = input.color(color.new(#000000, 100), "Border", inline = "bd", group = grpT)
+wBorder = input.int(1, "", minval = 0, maxval = 10, inline = "bd", group = grpT)
+cFrame  = input.color(color.new(#000000, 100), "Frame",  inline = "fr", group = grpT)
+wFrame  = input.int(0, "", minval = 0, maxval = 10, inline = "fr", group = grpT)
+
+grpR = "Status table rows"
+rMkt   = input.bool(true, "Market / Session",    group = grpR)
+rVerd  = input.bool(true, "Verdict / Grade",     group = grpR)
+rDir   = input.bool(true, "Direction",           group = grpR)
+rLvls  = input.bool(true, "Entry, zone, stop",   group = grpR)
+rTPs   = input.bool(true, "Targets",             group = grpR)
+rSess  = input.bool(true, "Session H / M / L",   group = grpR)
+rWin   = input.bool(true, "Window",              group = grpR)
+rLive  = input.bool(true, "Live status",         group = grpR)
+rRange = input.bool(true, "Routine range",       group = grpR)
+rRoot  = input.bool(true, "Chart root",          group = grpR)
+
+// Plot styles must be input-qualified, so they are resolved here from the inputs.
+stZone  = sZone  == "Step" ? plot.style_stepline : sZone  == "Circles" ? plot.style_circles : sZone  == "Cross" ? plot.style_cross : plot.style_linebr
+stEntry = sEntry == "Step" ? plot.style_stepline : sEntry == "Circles" ? plot.style_circles : sEntry == "Cross" ? plot.style_cross : plot.style_linebr
+stStop  = sStop  == "Step" ? plot.style_stepline : sStop  == "Circles" ? plot.style_circles : sStop  == "Cross" ? plot.style_cross : plot.style_linebr
+stTP1   = sTP1   == "Step" ? plot.style_stepline : sTP1   == "Circles" ? plot.style_circles : sTP1   == "Cross" ? plot.style_cross : plot.style_linebr
+stTP2   = sTP2   == "Step" ? plot.style_stepline : sTP2   == "Circles" ? plot.style_circles : sTP2   == "Cross" ? plot.style_cross : plot.style_linebr
+stTP3   = sTP3   == "Step" ? plot.style_stepline : sTP3   == "Circles" ? plot.style_circles : sTP3   == "Cross" ? plot.style_cross : plot.style_linebr
+stSH    = sSH    == "Step" ? plot.style_stepline : sSH    == "Circles" ? plot.style_circles : sSH    == "Cross" ? plot.style_cross : plot.style_linebr
+stSM    = sSM    == "Step" ? plot.style_stepline : sSM    == "Circles" ? plot.style_circles : sSM    == "Cross" ? plot.style_cross : plot.style_linebr
+stSL    = sSL    == "Step" ? plot.style_stepline : sSL    == "Circles" ? plot.style_circles : sSL    == "Cross" ? plot.style_cross : plot.style_linebr
 
 // ── RECOGNISED VALUE SETS ────────────────────────────────────────────────────
 ROUTINES    = "ASIA|LON|PRE|AM|AMLUNCH|PM|PH"
@@ -140,7 +223,7 @@ f_pos(string _p) =>
     _p == "Top Left" ? position.top_left : _p == "Top Center" ? position.top_center : _p == "Top Right" ? position.top_right : _p == "Middle Left" ? position.middle_left : _p == "Middle Center" ? position.middle_center : _p == "Middle Right" ? position.middle_right : _p == "Bottom Left" ? position.bottom_left : _p == "Bottom Center" ? position.bottom_center : position.bottom_right
 
 f_size(string _s) =>
-    _s == "Tiny" ? size.tiny : _s == "Small" ? size.small : _s == "Large" ? size.large : size.normal
+    _s == "Tiny" ? size.tiny : _s == "Small" ? size.small : _s == "Large" ? size.large : _s == "Huge" ? size.huge : _s == "Auto" ? size.auto : size.normal
 
 // ── CLEAN ────────────────────────────────────────────────────────────────────
 // Removes Enter/newline, carriage-return and tab characters and trims outer
@@ -388,24 +471,26 @@ f_stateCol(int _s) =>
     _s == S_WAIT or _s == S_WATCH ? cRowBg : _s == S_ZONE ? cWarn : _s >= S_ACTIVE and _s <= S_TP3 ? (_s == S_ACTIVE ? cInfo : cOk) : _s == S_STOP ? cBad : cWarn
 
 // ── PLOTS ────────────────────────────────────────────────────────────────────
-pLo = plot(valid and showZone ? vZoneLo : na, "Entry Zone Low",  color = cEntry, linewidth = lw, style = plot.style_linebr)
-pHi = plot(valid and showZone ? vZoneHi : na, "Entry Zone High", color = cEntry, linewidth = lw, style = plot.style_linebr)
-fill(pLo, pHi, color = cZone, title = "Entry Zone")
+bool drawNow = valid and (lvlFrom == "Full chart" or time >= winStart)
 
-plot(valid and showEntry ? vEntry : na, "Entry", color = cEntry, linewidth = lw + 1, style = plot.style_linebr)
-plot(valid and showStop  ? vStop  : na, "Stop",  color = cStop,  linewidth = lw + 1, style = plot.style_linebr)
-plot(valid and showTPs   ? vTP1   : na, "TP1",   color = cTP,    linewidth = lw, style = plot.style_linebr)
-plot(valid and showTPs   ? vTP2   : na, "TP2",   color = cTP,    linewidth = lw, style = plot.style_linebr)
-plot(valid and showTPs   ? vTP3   : na, "TP3",   color = cTP,    linewidth = lw, style = plot.style_linebr)
-plot(valid and showSess  ? vSHigh : na, "Session High", color = cSess, linewidth = lw, style = plot.style_linebr)
-plot(valid and showSess  ? vSMid  : na, "Session Mid",  color = cSess, linewidth = lw, style = plot.style_linebr)
-plot(valid and showSess  ? vSLow  : na, "Session Low",  color = cSess, linewidth = lw, style = plot.style_linebr)
+pLo = plot(drawNow and showZone ? vZoneLo : na, "Entry Zone Low",  color = cZoneLn, linewidth = wZone, style = stZone)
+pHi = plot(drawNow and showZone ? vZoneHi : na, "Entry Zone High", color = cZoneLn, linewidth = wZone, style = stZone)
+fill(pLo, pHi, color = showFill ? cZone : na, title = "Entry Zone")
 
-plotshape(showMarks and evEntry ? vEntry : na, "Entry filled", shape.diamond, location.absolute, cEntry, size = size.small)
-plotshape(showMarks and evStop  ? vStop  : na, "Stop hit",     shape.xcross,  location.absolute, cStop,  size = size.small)
-plotshape(showMarks and evTP1   ? vTP1   : na, "TP1 hit",      shape.circle,  location.absolute, cTP,    size = size.tiny)
-plotshape(showMarks and evTP2   ? vTP2   : na, "TP2 hit",      shape.circle,  location.absolute, cTP,    size = size.tiny)
-plotshape(showMarks and evTP3   ? vTP3   : na, "TP3 hit",      shape.circle,  location.absolute, cTP,    size = size.small)
+plot(drawNow and showEntry ? vEntry : na, "Entry", color = cEntry, linewidth = wEntry, style = stEntry)
+plot(drawNow and showStop  ? vStop  : na, "Stop",  color = cStop,  linewidth = wStop,  style = stStop)
+plot(drawNow and showTP1   ? vTP1   : na, "TP1",   color = cTP1,   linewidth = wTP1,   style = stTP1)
+plot(drawNow and showTP2   ? vTP2   : na, "TP2",   color = cTP2,   linewidth = wTP2,   style = stTP2)
+plot(drawNow and showTP3   ? vTP3   : na, "TP3",   color = cTP3,   linewidth = wTP3,   style = stTP3)
+plot(drawNow and showSH    ? vSHigh : na, "Session High", color = cSH, linewidth = wSH, style = stSH)
+plot(drawNow and showSM    ? vSMid  : na, "Session Mid",  color = cSM, linewidth = wSM, style = stSM)
+plot(drawNow and showSL    ? vSLow  : na, "Session Low",  color = cSL, linewidth = wSL, style = stSL)
+
+plotshape(showMarks and mkEntry and evEntry ? vEntry : na, "Entry filled", shape.diamond, location.absolute, cEntry, size = size.small)
+plotshape(showMarks and mkStop  and evStop  ? vStop  : na, "Stop hit",     shape.xcross,  location.absolute, cStop,  size = size.small)
+plotshape(showMarks and mkTPs   and evTP1   ? vTP1   : na, "TP1 hit",      shape.circle,  location.absolute, cTP1,   size = size.tiny)
+plotshape(showMarks and mkTPs   and evTP2   ? vTP2   : na, "TP2 hit",      shape.circle,  location.absolute, cTP2,   size = size.tiny)
+plotshape(showMarks and mkTPs   and evTP3   ? vTP3   : na, "TP3 hit",      shape.circle,  location.absolute, cTP3,   size = size.small)
 
 // ── LABELS ───────────────────────────────────────────────────────────────────
 var label lZoneLo = na
@@ -423,24 +508,26 @@ f_lbl(label _id, float _price, string _txt, color _col, bool _on) =>
     label.delete(_id)
     label out = na
     if _on and not na(_price)
-        out := label.new(bar_index + lblOffset, _price, _txt, xloc = xloc.bar_index, yloc = yloc.price, style = label.style_label_left, color = color.new(_col, 15), textcolor = color.white, size = size.small)
+        bool box = lblStyle == "Box"
+        string tx = lblPrice ? _txt + " " + str.tostring(_price) : _txt
+        out := label.new(bar_index + lblOffset, _price, tx, xloc = xloc.bar_index, yloc = yloc.price, style = label.style_label_left, color = box ? color.new(_col, lblTransp) : color.new(_col, 100), textcolor = box ? lblTxtC : _col, size = f_size(lblSz), textalign = text.align_left)
     out
 
 if barstate.islast
     bool L = showLbls and valid
-    lZoneLo := f_lbl(lZoneLo, vZoneLo, "ZONE LOW "  + str.tostring(vZoneLo), cEntry, L and showZone)
-    lZoneHi := f_lbl(lZoneHi, vZoneHi, "ZONE HIGH " + str.tostring(vZoneHi), cEntry, L and showZone)
-    lEntry  := f_lbl(lEntry,  vEntry,  "ENTRY "     + str.tostring(vEntry),  cEntry, L and showEntry)
-    lStop   := f_lbl(lStop,   vStop,   "STOP "      + str.tostring(vStop),   cStop,  L and showStop)
-    lTP1    := f_lbl(lTP1,    vTP1,    "TP1 "       + str.tostring(vTP1),    cTP,    L and showTPs)
-    lTP2    := f_lbl(lTP2,    vTP2,    "TP2 "       + str.tostring(vTP2),    cTP,    L and showTPs)
-    lTP3    := f_lbl(lTP3,    vTP3,    "TP3 "       + str.tostring(vTP3),    cTP,    L and showTPs)
-    lSH     := f_lbl(lSH,     vSHigh,  "SESS HIGH " + str.tostring(vSHigh),  cSess,  L and showSess)
-    lSM     := f_lbl(lSM,     vSMid,   "SESS MID "  + str.tostring(vSMid),   cSess,  L and showSess)
-    lSL     := f_lbl(lSL,     vSLow,   "SESS LOW "  + str.tostring(vSLow),   cSess,  L and showSess)
+    lZoneLo := f_lbl(lZoneLo, vZoneLo, nZoneLo, cZoneLn, L and showZone)
+    lZoneHi := f_lbl(lZoneHi, vZoneHi, nZoneHi, cZoneLn, L and showZone)
+    lEntry  := f_lbl(lEntry,  vEntry,  nEntry,  cEntry,  L and showEntry)
+    lStop   := f_lbl(lStop,   vStop,   nStop,   cStop,   L and showStop)
+    lTP1    := f_lbl(lTP1,    vTP1,    nTP1,    cTP1,    L and showTP1)
+    lTP2    := f_lbl(lTP2,    vTP2,    nTP2,    cTP2,    L and showTP2)
+    lTP3    := f_lbl(lTP3,    vTP3,    nTP3,    cTP3,    L and showTP3)
+    lSH     := f_lbl(lSH,     vSHigh,  nSH,     cSH,     L and showSH)
+    lSM     := f_lbl(lSM,     vSMid,   nSM,     cSM,     L and showSM)
+    lSL     := f_lbl(lSL,     vSLow,   nSL,     cSL,     L and showSL)
 
 // ── STATUS TABLE ─────────────────────────────────────────────────────────────
-var table t = table.new(f_pos(posSel), 2, 20, border_width = 1)
+var table t = table.new(f_pos(posSel), 2, 20, frame_color = cFrame, frame_width = wFrame, border_color = cBorder, border_width = wBorder)
 
 f_row(int _r, string _k, string _v) =>
     table.cell(t, 0, _r, _k, text_color = cTxt, bgcolor = cRowBg, text_size = f_size(txtSz), text_halign = text.align_left)
@@ -456,45 +543,69 @@ f_fmt(float _v) =>
 f_warn(int _r, string _k, string _v) =>
     f_rowC(_r, _k, _v, cWarn)
 
+// Rows are numbered as they are drawn, so hidden rows leave no gaps.
 if barstate.islast
     table.clear(t, 0, 0, 1, 19)
-    table.cell(t, 0, 0, "TCC TradeOS v2", text_color = cTxt, bgcolor = cHdrBg, text_size = f_size(txtSz), text_halign = text.align_left)
-    table.cell(t, 1, 0, valid ? pDate : "", text_color = cTxt, bgcolor = cHdrBg, text_size = f_size(txtSz), text_halign = text.align_right)
+    if showTbl
+        table.cell(t, 0, 0, tblTitle, text_color = cHdrTxt, bgcolor = cHdrBg, text_size = f_size(txtSz), text_halign = text.align_left)
+        table.cell(t, 1, 0, valid ? pDate : "", text_color = cHdrTxt, bgcolor = cHdrBg, text_size = f_size(txtSz), text_halign = text.align_right)
 
-    string stTxt = not hasIn ? "NO PLAN LOADED" : valid ? "PLAN LOADED" : "INVALID PLAN CODE"
-    color  stBg  = not hasIn ? cWarn : valid ? cOk : cBad
-    f_rowC(1, stTxt, "Parts: " + str.tostring(nPart) + " / 17", stBg)
+        string stTxt = not hasIn ? "NO PLAN LOADED" : valid ? "PLAN LOADED" : "INVALID PLAN CODE"
+        color  stBg  = not hasIn ? cWarn : valid ? cOk : cBad
+        f_rowC(1, stTxt, "Parts: " + str.tostring(nPart) + " / 17", stBg)
 
-    if not hasIn
-        f_warn(2, "PASTE PLAN CODE", "")
-        f_warn(3, "PRESS ENTER",     "")
-        f_warn(4, "THEN PRESS OK",   "")
-    else if not valid
-        f_row(2, "Reason", failReason)
-        f_row(3, "Input chars", str.tostring(str.length(plan)))
-        f_warn(4, "PASTE PLAN CODE", "")
-        f_warn(5, "PRESS ENTER",     "")
-        f_warn(6, "THEN PRESS OK",   "")
-    else
-        f_row(2, "Market / Session", pInst + " (" + f_group(pInst) + ") • " + f_routeName(pRout))
-        f_row(3, "Verdict / Grade",  pVerd + " • " + pGrade)
-        f_row(4, "Direction", pDir)
-        f_row(5, "Entry", f_fmt(vEntry))
-        f_row(6, "Entry zone", f_fmt(vZoneLo) + " – " + f_fmt(vZoneHi))
-        f_row(7, "Stop", f_fmt(vStop))
-        f_row(8, "TP1", f_fmt(vTP1))
-        f_row(9, "TP2", f_fmt(vTP2))
-        f_row(10, "TP3", f_fmt(vTP3))
-        f_row(11, "Session H / M / L", f_fmt(vSHigh) + " / " + f_fmt(vSMid) + " / " + f_fmt(vSLow))
-        f_row(12, "Window", winLbl)
-        if trackable
-            f_rowC(13, "Live status", f_stateTxt(state), f_stateCol(state))
-            f_row(14, "Routine range H / L", na(rHi) ? "—" : f_fmt(rHi) + " / " + f_fmt(rLo))
+        int r = 2
+        if not hasIn
+            f_warn(2, "PASTE PLAN CODE", "")
+            f_warn(3, "PRESS ENTER",     "")
+            f_warn(4, "THEN PRESS OK",   "")
+        else if not valid
+            f_row(2, "Reason", failReason)
+            f_row(3, "Input chars", str.tostring(str.length(plan)))
+            f_warn(4, "PASTE PLAN CODE", "")
+            f_warn(5, "PRESS ENTER",     "")
+            f_warn(6, "THEN PRESS OK",   "")
         else
-            f_row(13, "Live status", pDir == "STAND ASIDE" ? "STAND ASIDE — NO TRADE" : "TRACKING OFF")
-        f_row(15, "Chart root", symRoot)
-        if not symMatch
-            f_warn(16, "WARNING: PLAN = " + pInst, "CHART " + symRoot + " MAY NOT MATCH")
+            if rMkt
+                f_row(r, "Market / Session", pInst + " (" + f_group(pInst) + ") • " + f_routeName(pRout))
+                r += 1
+            if rVerd
+                f_row(r, "Verdict / Grade", pVerd + " • " + pGrade)
+                r += 1
+            if rDir
+                f_row(r, "Direction", pDir)
+                r += 1
+            if rLvls
+                f_row(r, "Entry", f_fmt(vEntry))
+                f_row(r + 1, "Entry zone", f_fmt(vZoneLo) + " – " + f_fmt(vZoneHi))
+                f_row(r + 2, "Stop", f_fmt(vStop))
+                r += 3
+            if rTPs
+                f_row(r, "TP1", f_fmt(vTP1))
+                f_row(r + 1, "TP2", f_fmt(vTP2))
+                f_row(r + 2, "TP3", f_fmt(vTP3))
+                r += 3
+            if rSess
+                f_row(r, "Session H / M / L", f_fmt(vSHigh) + " / " + f_fmt(vSMid) + " / " + f_fmt(vSLow))
+                r += 1
+            if rWin
+                f_row(r, "Window", winLbl)
+                r += 1
+            if rLive
+                if trackable
+                    f_rowC(r, "Live status", f_stateTxt(state), f_stateCol(state))
+                else
+                    f_row(r, "Live status", pDir == "STAND ASIDE" ? "STAND ASIDE — NO TRADE" : "TRACKING OFF")
+                r += 1
+            if rRange and trackable
+                f_row(r, "Routine range H / L", na(rHi) ? "—" : f_fmt(rHi) + " / " + f_fmt(rLo))
+                r += 1
+            if rRoot
+                f_row(r, "Chart root", symRoot)
+                r += 1
+            // The symbol-mismatch warning is always shown.
+            if not symMatch
+                f_warn(r, "WARNING: PLAN = " + pInst, "CHART " + symRoot + " MAY NOT MATCH")
 
 // ── ALERTS ───────────────────────────────────────────────────────────────────
 // Static alerts: pick one in "Create Alert → Condition → TCC TradeOS".
