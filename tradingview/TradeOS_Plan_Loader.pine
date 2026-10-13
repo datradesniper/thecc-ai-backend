@@ -1,0 +1,529 @@
+//@version=6
+indicator("TradeOS Plan Loader", "TCC TradeOS", overlay = true, max_labels_count = 100)
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  THE CONSISTENCY COLLECTIVE  —  TCC TradeOS Plan Loader
+//  Indicator ID .... THECC-0027 (RESERVED — not yet published to the registry)
+//  Version ......... 2.0.0        Internal Build .... 2.0.0-b001
+//  Pine Version .... 6            Edition ........... Student
+//  Status .......... Production Candidate
+//  Build Date ...... 2026-10-13
+//  Developer ....... The Consistency Collective
+//  Copyright ....... (c) 2026 The Consistency Collective. All rights reserved.
+// ───────────────────────────────────────────────────────────────────────────────
+//  MEMBER WORKFLOW — all six steps are required
+//    1. Open the correct chart for the plan (e.g. NQ, ES, YM, CL, GC).
+//    2. Open TCC TradeOS Plan Loader Settings.
+//    3. Paste the Plan Code into the TradeOS Plan Code field.
+//    4. PRESS ENTER to commit the pasted information.
+//    5. Press OK.
+//    6. Confirm the levels appear.
+//
+//  INPUT-COMMIT BEHAVIOUR — what was actually observed, 2026-08-14
+//    On the tested TradingView setup, pasting alone did NOT commit the Plan Code:
+//    the text was visible in the Settings dialog but the script read an empty
+//    string. Pressing Enter before pressing OK successfully committed it. The
+//    cleaning function removes Enter/newline, carriage-return and tab characters
+//    before parsing. THE PRECISE UNDERLYING TRADINGVIEW PERSISTENCE CAUSE REMAINS
+//    UNPROVEN — do not state a confirmed root cause anywhere downstream.
+//
+//  SCOPE — DISPLAY AND ALERTS ONLY. No broker orders, no position management, no
+//  outbound data beyond TradingView's own alerts. Canonical TradeOS values are
+//  authoritative: nothing here is recalculated, inferred, reordered or "corrected".
+//
+//  PLAN CODE — one pipe-delimited string, exactly 17 fields (unchanged from 1.x)
+//    0 TCC1 | 1 date | 2 routine | 3 instrument | 4 verdict | 5 grade
+//    6 direction | 7 zone low | 8 zone high | 9 entry | 10 stop
+//    11 tp1 | 12 tp2 | 13 tp3 | 14 session high | 15 session mid | 16 session low
+//
+//  MARKET GROUPS — three groups, each instrument accepted with its micro contract
+//    Equity Index ... NQ ES YM RTY        (MNQ MES MYM M2K)
+//    Energy ......... CL NG               (MCL MNG; QM QG e-mini)
+//    Metals ......... GC SI HG            (MGC SIL MHG)
+//
+//  LIVE SESSION TRACKING — from the routine's window start on the plan date
+//  (New York time, editable per routine) the loader follows the plan bar by bar:
+//    WATCHING → IN ZONE → ENTRY FILLED → TP1 → TP2 → TP3
+//    Terminal outcomes: STOPPED, EXPIRED (no entry before window end),
+//    INVALIDATED (stop traded before entry), MISSED (TP1 traded before entry).
+//  If a bar trades both stop and target, the STOP is recorded (conservative).
+//  Tracking is history-deterministic: it never repaints closed bars.
+//
+//  CANONICAL ROUTINES — seven internal identifiers, one identity each. LONDON and
+//  LUNCH are REJECTED as Plan Code identifiers (duplicates of LON and AMLUNCH).
+//
+//  CHANGE LOG
+//    2.0.0  2026-10-13  Three market groups (Index, Energy, Metals) with micro
+//                       guards; live session tracking state machine; routine
+//                       windows; live routine range; event markers; alerts.
+//    1.1.0  2026-08-14  Hardening: single Plan Code input; full field validation;
+//                       exact root-symbol guard with micro toggle; on-screen
+//                       PASTE/ENTER/OK instruction; canonical seven routines.
+//    1.0.0  2026-08-14  Initial build. 18/18 valid-plan functional checks.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// FROZEN CONTRACT: the type (input.text_area) and title ("TradeOS Plan Code") must
+// not change in any future version. TradingView keys a stored input value on
+// (type + title); altering either would silently blank every member's saved plan.
+PH = "PASTE_PLAN_CODE_HERE"
+rawPlan = input.text_area(PH, title = "TradeOS Plan Code")
+
+grpS = "Symbol guard"
+allowMicro = input.bool(true, "Allow matching micro / mini contract", group = grpS)
+
+grpK = "Live session tracking (New York time)"
+trackOn = input.bool(true, "Track plan live", group = grpK)
+expireOn = input.bool(true, "Expire if no entry by window end", group = grpK)
+wAsia  = input.session("1800-0200", "Asia Session",        group = grpK)
+wLon   = input.session("0200-0700", "London Session",      group = grpK)
+wPre   = input.session("0700-0930", "Pre-Market Session",  group = grpK)
+wAM    = input.session("0930-1130", "New York AM Session", group = grpK)
+wLunch = input.session("1130-1330", "Lunch Session",       group = grpK)
+wPM    = input.session("1330-1500", "New York PM Session", group = grpK)
+wPH    = input.session("1500-1600", "Power Hour",          group = grpK)
+showMarks = input.bool(true, "Event markers on chart", group = grpK)
+
+grpA = "Alerts"
+alertDyn = input.bool(true, "Detailed alert() messages (use 'Any alert() function call')", group = grpA)
+
+grpV = "Display"
+showZone  = input.bool(true,  "Entry zone",     group = grpV)
+showEntry = input.bool(true,  "Entry",          group = grpV)
+showStop  = input.bool(true,  "Stop",           group = grpV)
+showTPs   = input.bool(true,  "Targets",        group = grpV)
+showSess  = input.bool(true,  "Session levels", group = grpV)
+showLbls  = input.bool(true,  "Labels",         group = grpV)
+lblOffset = input.int(12, "Label offset (bars)", minval = 1, maxval = 100, group = grpV)
+
+grpC = "Colors"
+cEntry = input.color(color.new(#2962FF, 0),  "Entry / zone", group = grpC)
+cZone  = input.color(color.new(#2962FF, 88), "Zone fill",    group = grpC)
+cStop  = input.color(color.new(#FF3B30, 0),  "Stop",         group = grpC)
+cTP    = input.color(color.new(#00C853, 0),  "Targets",      group = grpC)
+cSess  = input.color(color.new(#9E9E9E, 0),  "Session",      group = grpC)
+lw     = input.int(1, "Line width", minval = 1, maxval = 4, group = grpC)
+
+grpT = "Status table"
+posSel = input.string("Top Right", "Position", options = ["Top Left", "Top Center", "Top Right", "Middle Left", "Middle Center", "Middle Right", "Bottom Left", "Bottom Center", "Bottom Right"], group = grpT)
+txtSz  = input.string("Normal", "Text size", options = ["Tiny", "Small", "Normal", "Large"], group = grpT)
+cHdrBg = input.color(color.new(#1E3A8A, 0),  "Header bg",  group = grpT)
+cRowBg = input.color(color.new(#111111, 25), "Row bg",     group = grpT)
+cTxt   = input.color(color.white,            "Text",       group = grpT)
+cOk    = input.color(color.new(#00C853, 0),  "OK bg",      group = grpT)
+cBad   = input.color(color.new(#FF3B30, 0),  "Error bg",   group = grpT)
+cWarn  = input.color(color.new(#FF9800, 0),  "Warning bg", group = grpT)
+cInfo  = input.color(color.new(#2962FF, 0),  "Active bg",  group = grpT)
+
+// ── RECOGNISED VALUE SETS ────────────────────────────────────────────────────
+ROUTINES    = "ASIA|LON|PRE|AM|AMLUNCH|PM|PH"
+INSTRUMENTS = "NQ|ES|YM|RTY|CL|NG|GC|SI|HG"
+VERDICTS    = "GO|CAUTION|STAND ASIDE"
+GRADES      = "A+|A|A-|B+|B|B-|C+|C|C-|D+|D|D-|F"
+DIRECTIONS  = "LONG|SHORT|STAND ASIDE"
+NY_TZ       = "America/New_York"
+
+f_routeName(string _r) =>
+    _r == "ASIA" ? "Asia Session" : _r == "LON" ? "London Session" : _r == "PRE" ? "Pre-Market Session" : _r == "AM" ? "New York AM Session" : _r == "AMLUNCH" ? "Lunch Session" : _r == "PM" ? "New York PM Session" : _r == "PH" ? "Power Hour" : _r
+
+f_group(string _i) =>
+    _i == "NQ" or _i == "ES" or _i == "YM" or _i == "RTY" ? "Equity Index" : _i == "CL" or _i == "NG" ? "Energy" : _i == "GC" or _i == "SI" or _i == "HG" ? "Metals" : "?"
+
+// Smaller-contract roots accepted for each plan instrument when allowMicro is on.
+f_micros(string _i) =>
+    _i == "NQ" ? "MNQ" : _i == "ES" ? "MES" : _i == "YM" ? "MYM" : _i == "RTY" ? "M2K" : _i == "CL" ? "MCL|QM" : _i == "NG" ? "MNG|QG" : _i == "GC" ? "MGC" : _i == "SI" ? "SIL" : _i == "HG" ? "MHG" : ""
+
+f_win(string _r) =>
+    _r == "ASIA" ? wAsia : _r == "LON" ? wLon : _r == "PRE" ? wPre : _r == "AM" ? wAM : _r == "AMLUNCH" ? wLunch : _r == "PM" ? wPM : wPH
+
+f_pos(string _p) =>
+    _p == "Top Left" ? position.top_left : _p == "Top Center" ? position.top_center : _p == "Top Right" ? position.top_right : _p == "Middle Left" ? position.middle_left : _p == "Middle Center" ? position.middle_center : _p == "Middle Right" ? position.middle_right : _p == "Bottom Left" ? position.bottom_left : _p == "Bottom Center" ? position.bottom_center : position.bottom_right
+
+f_size(string _s) =>
+    _s == "Tiny" ? size.tiny : _s == "Small" ? size.small : _s == "Large" ? size.large : size.normal
+
+// ── CLEAN ────────────────────────────────────────────────────────────────────
+// Removes Enter/newline, carriage-return and tab characters and trims outer
+// spaces. Inner spaces are PRESERVED so "STAND ASIDE" survives.
+f_clean(string _raw) =>
+    string s = _raw
+    s := str.replace_all(s, "\n", "")
+    s := str.replace_all(s, "\r", "")
+    s := str.replace_all(s, "\t", "")
+    int n  = str.length(s)
+    int st = 0
+    int en = n
+    bool go = true
+    while go and st < en
+        go := str.substring(s, st, st + 1) == " "
+        if go
+            st += 1
+    go := true
+    while go and en > st
+        go := str.substring(s, en - 1, en) == " "
+        if go
+            en -= 1
+    en > st ? str.substring(s, st, en) : ""
+
+// ── PARSE ────────────────────────────────────────────────────────────────────
+string cPlan = f_clean(rawPlan)
+string plan  = cPlan == PH ? "" : cPlan
+bool   hasIn = str.length(plan) > 0
+parts        = str.split(plan, "|")
+int    nPart = hasIn ? array.size(parts) : 0
+
+f_str(int _i) =>
+    nPart > _i ? f_clean(array.get(parts, _i)) : ""
+
+f_num(int _i) =>
+    string s  = str.upper(f_str(_i))
+    float out = (s == "NA" or s == "") ? na : str.tonumber(s)
+    out
+
+f_numOk(int _i) =>
+    string s = str.upper(f_str(_i))
+    (s == "NA" or s == "") ? true : not na(str.tonumber(s))
+
+f_inList(string _v, string _list) =>
+    str.contains("|" + _list + "|", "|" + _v + "|")
+
+f_fname(int _i) =>
+    _i == 7 ? "zone low" : _i == 8 ? "zone high" : _i == 9 ? "entry" : _i == 10 ? "stop" : _i == 11 ? "TP1" : _i == 12 ? "TP2" : _i == 13 ? "TP3" : _i == 14 ? "session high" : _i == 15 ? "session mid" : _i == 16 ? "session low" : "?"
+
+f_okDate(string _d) =>
+    bool ok = str.length(_d) == 10
+    if ok
+        ok := str.substring(_d, 4, 5) == "-" and str.substring(_d, 7, 8) == "-"
+    if ok
+        float y  = str.tonumber(str.substring(_d, 0, 4))
+        float mo = str.tonumber(str.substring(_d, 5, 7))
+        float dy = str.tonumber(str.substring(_d, 8, 10))
+        ok := not na(y) and not na(mo) and not na(dy) and y >= 2000 and y <= 2999 and mo >= 1 and mo <= 12 and dy >= 1 and dy <= 31
+    ok
+
+// ── VALIDATION ───────────────────────────────────────────────────────────────
+f_reason() =>
+    string r = ""
+    if nPart != 17
+        r := "Expected 17 fields, got " + str.tostring(nPart)
+    else if f_str(0) != "TCC1"
+        r := "Bad tag '" + f_str(0) + "' (expected TCC1)"
+    else if not f_okDate(f_str(1))
+        r := "Bad date '" + f_str(1) + "' (need YYYY-MM-DD)"
+    else if not f_inList(str.upper(f_str(2)), ROUTINES)
+        r := "Unknown routine '" + f_str(2) + "'"
+    else if not f_inList(str.upper(f_str(3)), INSTRUMENTS)
+        r := "Unknown instrument '" + f_str(3) + "'"
+    else if not f_inList(str.upper(f_str(4)), VERDICTS)
+        r := "Unknown verdict '" + f_str(4) + "'"
+    else if not f_inList(str.upper(f_str(5)), GRADES)
+        r := "Unknown grade '" + f_str(5) + "'"
+    else if not f_inList(str.upper(f_str(6)), DIRECTIONS)
+        r := "Unknown direction '" + f_str(6) + "'"
+    else
+        int bad = -1
+        for i = 7 to 16
+            if bad == -1 and not f_numOk(i)
+                bad := i
+        if bad >= 0
+            r := "Non-numeric " + f_fname(bad) + " '" + f_str(bad) + "'"
+        else
+            string d = str.upper(f_str(6))
+            if d == "LONG" or d == "SHORT"
+                int miss = -1
+                for j = 9 to 13
+                    if miss == -1 and na(f_num(j))
+                        miss := j
+                if miss >= 0
+                    r := d + " plan missing " + f_fname(miss)
+    r
+
+string failReason = hasIn ? f_reason() : ""
+bool   valid      = hasIn and str.length(failReason) == 0
+
+string pDate  = valid ? f_str(1) : ""
+string pRout  = valid ? str.upper(f_str(2)) : ""
+string pInst  = valid ? str.upper(f_str(3)) : ""
+string pVerd  = valid ? str.upper(f_str(4)) : ""
+string pGrade = valid ? str.upper(f_str(5)) : ""
+string pDir   = valid ? str.upper(f_str(6)) : ""
+
+float vZoneLo = valid ? f_num(7)  : na
+float vZoneHi = valid ? f_num(8)  : na
+float vEntry  = valid ? f_num(9)  : na
+float vStop   = valid ? f_num(10) : na
+float vTP1    = valid ? f_num(11) : na
+float vTP2    = valid ? f_num(12) : na
+float vTP3    = valid ? f_num(13) : na
+float vSHigh  = valid ? f_num(14) : na
+float vSMid   = valid ? f_num(15) : na
+float vSLow   = valid ? f_num(16) : na
+
+// ── SYMBOL GUARD ─────────────────────────────────────────────────────────────
+// Exact root match. Warning-only: a mismatch NEVER blocks.
+string symRoot  = str.length(syminfo.root) > 0 ? str.upper(syminfo.root) : str.upper(syminfo.ticker)
+bool   symMatch = not valid or symRoot == pInst or (allowMicro and f_inList(symRoot, f_micros(pInst)))
+
+// ── ROUTINE WINDOW ───────────────────────────────────────────────────────────
+// Window is read in New York time on the plan date. A window whose start is at or
+// after its end (Asia, 1800-0200) begins on the previous calendar day.
+f_hm(string _s, int _off) =>
+    int(str.tonumber(str.substring(_s, _off, _off + 2)))
+
+f_window(string _r, string _d) =>
+    string w = f_win(_r)
+    int y  = int(str.tonumber(str.substring(_d, 0, 4)))
+    int mo = int(str.tonumber(str.substring(_d, 5, 7)))
+    int dy = int(str.tonumber(str.substring(_d, 8, 10)))
+    int sh = f_hm(w, 0)
+    int sm = f_hm(w, 2)
+    int eh = f_hm(w, 5)
+    int em = f_hm(w, 7)
+    int st = timestamp(NY_TZ, y, mo, dy, sh, sm)
+    int en = timestamp(NY_TZ, y, mo, dy, eh, em)
+    if sh * 60 + sm >= eh * 60 + em
+        st -= 86400000
+    [st, en]
+
+string safeRout = valid ? pRout : "AM"
+string safeDate = valid ? pDate : "2000-01-01"
+[winStart, winEnd] = f_window(safeRout, safeDate)
+string winTxt = f_win(safeRout)
+string winLbl = str.substring(winTxt, 0, 2) + ":" + str.substring(winTxt, 2, 4) + "–" + str.substring(winTxt, 5, 7) + ":" + str.substring(winTxt, 7, 9) + " NY"
+
+// ── LIVE SESSION TRACKING ────────────────────────────────────────────────────
+S_WAIT    = 0
+S_WATCH   = 1
+S_ZONE    = 2
+S_ACTIVE  = 3
+S_TP1     = 4
+S_TP2     = 5
+S_TP3     = 6
+S_STOP    = 7
+S_EXPIRED = 8
+S_INVAL   = 9
+S_MISSED  = 10
+
+bool isLong    = pDir == "LONG"
+bool isShort   = pDir == "SHORT"
+bool trackable = valid and trackOn and (isLong or isShort)
+
+float pc = nz(close[1], open)
+
+// Touch: bar range contains the level, or the bar gapped through it.
+f_touch(float _lvl, float _pc) =>
+    not na(_lvl) and ((high >= _lvl and low <= _lvl) or (_pc < _lvl and low > _lvl) or (_pc > _lvl and high < _lvl))
+
+f_up(float _lvl) =>
+    not na(_lvl) and high >= _lvl
+
+f_dn(float _lvl) =>
+    not na(_lvl) and low <= _lvl
+
+bool zoneHit  = not na(vZoneLo) and not na(vZoneHi) and low <= math.max(vZoneLo, vZoneHi) and high >= math.min(vZoneLo, vZoneHi)
+bool entryHit = f_touch(vEntry, pc)
+bool stopHit  = isLong ? f_dn(vStop) : f_up(vStop)
+bool tp1Hit   = isLong ? f_up(vTP1)  : f_dn(vTP1)
+bool tp2Hit   = isLong ? f_up(vTP2)  : f_dn(vTP2)
+bool tp3Hit   = isLong ? f_up(vTP3)  : f_dn(vTP3)
+
+var int   state    = S_WAIT
+var int   tpBefore = 0
+var float rHi      = na
+var float rLo      = na
+
+bool evZone   = false
+bool evEntry  = false
+bool evStop   = false
+bool evTP1    = false
+bool evTP2    = false
+bool evTP3    = false
+bool evExpire = false
+bool evInval  = false
+bool evMissed = false
+
+if trackable and time >= winStart
+    if time < winEnd
+        rHi := na(rHi) ? high : math.max(rHi, high)
+        rLo := na(rLo) ? low  : math.min(rLo, low)
+    if state == S_WAIT
+        state := S_WATCH
+    if state == S_WATCH or state == S_ZONE
+        if expireOn and time >= winEnd
+            state    := S_EXPIRED
+            evExpire := true
+        else
+            if state == S_WATCH and zoneHit
+                state  := S_ZONE
+                evZone := true
+            if entryHit
+                state   := S_ACTIVE
+                evEntry := true
+            else if stopHit
+                state   := S_INVAL
+                evInval := true
+            else if tp1Hit
+                state    := S_MISSED
+                evMissed := true
+    if state >= S_ACTIVE and state <= S_TP2
+        if stopHit
+            tpBefore := state - S_ACTIVE
+            state    := S_STOP
+            evStop   := true
+        else
+            if state == S_ACTIVE and tp1Hit
+                state := S_TP1
+                evTP1 := true
+            if state == S_TP1 and tp2Hit
+                state := S_TP2
+                evTP2 := true
+            if state == S_TP2 and tp3Hit
+                state := S_TP3
+                evTP3 := true
+
+f_stateTxt(int _s) =>
+    _s == S_WAIT ? "WAITING FOR WINDOW" : _s == S_WATCH ? "WATCHING" : _s == S_ZONE ? "IN ENTRY ZONE" : _s == S_ACTIVE ? "ENTRY FILLED" : _s == S_TP1 ? "TP1 HIT" : _s == S_TP2 ? "TP2 HIT" : _s == S_TP3 ? "TP3 HIT — COMPLETE" : _s == S_STOP ? (tpBefore > 0 ? "STOPPED AFTER TP" + str.tostring(tpBefore) : "STOPPED") : _s == S_EXPIRED ? "EXPIRED — NO ENTRY" : _s == S_INVAL ? "INVALIDATED — STOP BEFORE ENTRY" : _s == S_MISSED ? "MISSED — TP1 BEFORE ENTRY" : "?"
+
+f_stateCol(int _s) =>
+    _s == S_WAIT or _s == S_WATCH ? cRowBg : _s == S_ZONE ? cWarn : _s >= S_ACTIVE and _s <= S_TP3 ? (_s == S_ACTIVE ? cInfo : cOk) : _s == S_STOP ? cBad : cWarn
+
+// ── PLOTS ────────────────────────────────────────────────────────────────────
+pLo = plot(valid and showZone ? vZoneLo : na, "Entry Zone Low",  color = cEntry, linewidth = lw, style = plot.style_linebr)
+pHi = plot(valid and showZone ? vZoneHi : na, "Entry Zone High", color = cEntry, linewidth = lw, style = plot.style_linebr)
+fill(pLo, pHi, color = cZone, title = "Entry Zone")
+
+plot(valid and showEntry ? vEntry : na, "Entry", color = cEntry, linewidth = lw + 1, style = plot.style_linebr)
+plot(valid and showStop  ? vStop  : na, "Stop",  color = cStop,  linewidth = lw + 1, style = plot.style_linebr)
+plot(valid and showTPs   ? vTP1   : na, "TP1",   color = cTP,    linewidth = lw, style = plot.style_linebr)
+plot(valid and showTPs   ? vTP2   : na, "TP2",   color = cTP,    linewidth = lw, style = plot.style_linebr)
+plot(valid and showTPs   ? vTP3   : na, "TP3",   color = cTP,    linewidth = lw, style = plot.style_linebr)
+plot(valid and showSess  ? vSHigh : na, "Session High", color = cSess, linewidth = lw, style = plot.style_linebr)
+plot(valid and showSess  ? vSMid  : na, "Session Mid",  color = cSess, linewidth = lw, style = plot.style_linebr)
+plot(valid and showSess  ? vSLow  : na, "Session Low",  color = cSess, linewidth = lw, style = plot.style_linebr)
+
+plotshape(showMarks and evEntry ? vEntry : na, "Entry filled", shape.diamond, location.absolute, cEntry, size = size.small)
+plotshape(showMarks and evStop  ? vStop  : na, "Stop hit",     shape.xcross,  location.absolute, cStop,  size = size.small)
+plotshape(showMarks and evTP1   ? vTP1   : na, "TP1 hit",      shape.circle,  location.absolute, cTP,    size = size.tiny)
+plotshape(showMarks and evTP2   ? vTP2   : na, "TP2 hit",      shape.circle,  location.absolute, cTP,    size = size.tiny)
+plotshape(showMarks and evTP3   ? vTP3   : na, "TP3 hit",      shape.circle,  location.absolute, cTP,    size = size.small)
+
+// ── LABELS ───────────────────────────────────────────────────────────────────
+var label lZoneLo = na
+var label lZoneHi = na
+var label lEntry  = na
+var label lStop   = na
+var label lTP1    = na
+var label lTP2    = na
+var label lTP3    = na
+var label lSH     = na
+var label lSM     = na
+var label lSL     = na
+
+f_lbl(label _id, float _price, string _txt, color _col, bool _on) =>
+    label.delete(_id)
+    label out = na
+    if _on and not na(_price)
+        out := label.new(bar_index + lblOffset, _price, _txt, xloc = xloc.bar_index, yloc = yloc.price, style = label.style_label_left, color = color.new(_col, 15), textcolor = color.white, size = size.small)
+    out
+
+if barstate.islast
+    bool L = showLbls and valid
+    lZoneLo := f_lbl(lZoneLo, vZoneLo, "ZONE LOW "  + str.tostring(vZoneLo), cEntry, L and showZone)
+    lZoneHi := f_lbl(lZoneHi, vZoneHi, "ZONE HIGH " + str.tostring(vZoneHi), cEntry, L and showZone)
+    lEntry  := f_lbl(lEntry,  vEntry,  "ENTRY "     + str.tostring(vEntry),  cEntry, L and showEntry)
+    lStop   := f_lbl(lStop,   vStop,   "STOP "      + str.tostring(vStop),   cStop,  L and showStop)
+    lTP1    := f_lbl(lTP1,    vTP1,    "TP1 "       + str.tostring(vTP1),    cTP,    L and showTPs)
+    lTP2    := f_lbl(lTP2,    vTP2,    "TP2 "       + str.tostring(vTP2),    cTP,    L and showTPs)
+    lTP3    := f_lbl(lTP3,    vTP3,    "TP3 "       + str.tostring(vTP3),    cTP,    L and showTPs)
+    lSH     := f_lbl(lSH,     vSHigh,  "SESS HIGH " + str.tostring(vSHigh),  cSess,  L and showSess)
+    lSM     := f_lbl(lSM,     vSMid,   "SESS MID "  + str.tostring(vSMid),   cSess,  L and showSess)
+    lSL     := f_lbl(lSL,     vSLow,   "SESS LOW "  + str.tostring(vSLow),   cSess,  L and showSess)
+
+// ── STATUS TABLE ─────────────────────────────────────────────────────────────
+var table t = table.new(f_pos(posSel), 2, 20, border_width = 1)
+
+f_row(int _r, string _k, string _v) =>
+    table.cell(t, 0, _r, _k, text_color = cTxt, bgcolor = cRowBg, text_size = f_size(txtSz), text_halign = text.align_left)
+    table.cell(t, 1, _r, _v, text_color = cTxt, bgcolor = cRowBg, text_size = f_size(txtSz), text_halign = text.align_right)
+
+f_rowC(int _r, string _k, string _v, color _bg) =>
+    table.cell(t, 0, _r, _k, text_color = cTxt, bgcolor = _bg, text_size = f_size(txtSz), text_halign = text.align_left)
+    table.cell(t, 1, _r, _v, text_color = cTxt, bgcolor = _bg, text_size = f_size(txtSz), text_halign = text.align_right)
+
+f_fmt(float _v) =>
+    na(_v) ? "NA" : str.tostring(_v)
+
+f_warn(int _r, string _k, string _v) =>
+    f_rowC(_r, _k, _v, cWarn)
+
+if barstate.islast
+    table.clear(t, 0, 0, 1, 19)
+    table.cell(t, 0, 0, "TCC TradeOS v2", text_color = cTxt, bgcolor = cHdrBg, text_size = f_size(txtSz), text_halign = text.align_left)
+    table.cell(t, 1, 0, valid ? pDate : "", text_color = cTxt, bgcolor = cHdrBg, text_size = f_size(txtSz), text_halign = text.align_right)
+
+    string stTxt = not hasIn ? "NO PLAN LOADED" : valid ? "PLAN LOADED" : "INVALID PLAN CODE"
+    color  stBg  = not hasIn ? cWarn : valid ? cOk : cBad
+    f_rowC(1, stTxt, "Parts: " + str.tostring(nPart) + " / 17", stBg)
+
+    if not hasIn
+        f_warn(2, "PASTE PLAN CODE", "")
+        f_warn(3, "PRESS ENTER",     "")
+        f_warn(4, "THEN PRESS OK",   "")
+    else if not valid
+        f_row(2, "Reason", failReason)
+        f_row(3, "Input chars", str.tostring(str.length(plan)))
+        f_warn(4, "PASTE PLAN CODE", "")
+        f_warn(5, "PRESS ENTER",     "")
+        f_warn(6, "THEN PRESS OK",   "")
+    else
+        f_row(2, "Market / Session", pInst + " (" + f_group(pInst) + ") • " + f_routeName(pRout))
+        f_row(3, "Verdict / Grade",  pVerd + " • " + pGrade)
+        f_row(4, "Direction", pDir)
+        f_row(5, "Entry", f_fmt(vEntry))
+        f_row(6, "Entry zone", f_fmt(vZoneLo) + " – " + f_fmt(vZoneHi))
+        f_row(7, "Stop", f_fmt(vStop))
+        f_row(8, "TP1", f_fmt(vTP1))
+        f_row(9, "TP2", f_fmt(vTP2))
+        f_row(10, "TP3", f_fmt(vTP3))
+        f_row(11, "Session H / M / L", f_fmt(vSHigh) + " / " + f_fmt(vSMid) + " / " + f_fmt(vSLow))
+        f_row(12, "Window", winLbl)
+        if trackable
+            f_rowC(13, "Live status", f_stateTxt(state), f_stateCol(state))
+            f_row(14, "Routine range H / L", na(rHi) ? "—" : f_fmt(rHi) + " / " + f_fmt(rLo))
+        else
+            f_row(13, "Live status", pDir == "STAND ASIDE" ? "STAND ASIDE — NO TRADE" : "TRACKING OFF")
+        f_row(15, "Chart root", symRoot)
+        if not symMatch
+            f_warn(16, "WARNING: PLAN = " + pInst, "CHART " + symRoot + " MAY NOT MATCH")
+
+// ── ALERTS ───────────────────────────────────────────────────────────────────
+// Static alerts: pick one in "Create Alert → Condition → TCC TradeOS".
+alertcondition(evZone,   "TradeOS Entry Zone Reached", "TradeOS {{ticker}}: price reached the entry zone.")
+alertcondition(evEntry,  "TradeOS Entry Filled",       "TradeOS {{ticker}}: entry price traded.")
+alertcondition(evStop,   "TradeOS Stop Hit",           "TradeOS {{ticker}}: stop hit.")
+alertcondition(evTP1,    "TradeOS TP1 Hit",            "TradeOS {{ticker}}: TP1 hit.")
+alertcondition(evTP2,    "TradeOS TP2 Hit",            "TradeOS {{ticker}}: TP2 hit.")
+alertcondition(evTP3,    "TradeOS TP3 Hit",            "TradeOS {{ticker}}: TP3 hit — plan complete.")
+alertcondition(evExpire or evInval or evMissed, "TradeOS Plan Ended Without Entry", "TradeOS {{ticker}}: plan expired, invalidated or missed before entry.")
+alertcondition(evZone or evEntry or evStop or evTP1 or evTP2 or evTP3 or evExpire or evInval or evMissed, "TradeOS Any Plan Event", "TradeOS {{ticker}}: plan event.")
+
+// Detailed alerts: choose "Any alert() function call" when creating the alert.
+if alertDyn and trackable
+    string hdr = "TradeOS " + pInst + " " + f_routeName(pRout) + " " + pDir + ": "
+    if evZone
+        alert(hdr + "ENTRY ZONE reached " + f_fmt(vZoneLo) + " – " + f_fmt(vZoneHi), alert.freq_once_per_bar)
+    if evEntry
+        alert(hdr + "ENTRY filled " + f_fmt(vEntry) + " | Stop " + f_fmt(vStop) + " | TP1 " + f_fmt(vTP1), alert.freq_once_per_bar)
+    if evStop
+        alert(hdr + "STOP hit " + f_fmt(vStop), alert.freq_once_per_bar)
+    if evTP1
+        alert(hdr + "TP1 hit " + f_fmt(vTP1), alert.freq_once_per_bar)
+    if evTP2
+        alert(hdr + "TP2 hit " + f_fmt(vTP2), alert.freq_once_per_bar)
+    if evTP3
+        alert(hdr + "TP3 hit " + f_fmt(vTP3) + " — plan complete", alert.freq_once_per_bar)
+    if evExpire
+        alert(hdr + "EXPIRED — no entry by " + winLbl, alert.freq_once_per_bar)
+    if evInval
+        alert(hdr + "INVALIDATED — stop traded before entry", alert.freq_once_per_bar)
+    if evMissed
+        alert(hdr + "MISSED — TP1 traded before entry", alert.freq_once_per_bar)
