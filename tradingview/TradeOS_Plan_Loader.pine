@@ -12,7 +12,7 @@ indicator("TradeOS Plan Loader", "TCC TradeOS", overlay = true, max_labels_count
 //  Copyright ....... (c) 2026 The Consistency Collective. All rights reserved.
 // ───────────────────────────────────────────────────────────────────────────────
 //  MEMBER WORKFLOW — all six steps are required
-//    1. Open the correct chart for the plan (e.g. NQ, ES, YM, CL, GC).
+//    1. Open the correct chart for the plan (e.g. NQ, ES, YM, CL, HO, RB, GC, SI, HG).
 //    2. Open TCC TradeOS Plan Loader Settings.
 //    3. Paste the Plan Code into the TradeOS Plan Code field.
 //    4. PRESS ENTER to commit the pasted information.
@@ -37,12 +37,13 @@ indicator("TradeOS Plan Loader", "TCC TradeOS", overlay = true, max_labels_count
 //    11 tp1 | 12 tp2 | 13 tp3 | 14 session high | 15 session mid | 16 session low
 //
 //  MARKET GROUPS — three groups, each instrument accepted with its micro contract
-//    Equity Index ... NQ ES YM RTY        (MNQ MES MYM M2K)
-//    Energy ......... CL NG               (MCL MNG; QM QG e-mini)
-//    Metals ......... GC SI HG            (MGC SIL MHG)
+//    Equity ......... NQ ES YM            (MNQ MES MYM)
+//    Energy ......... CL HO RB            (MCL, QM e-mini)
+//    Metals ......... GC SI HG            (MGC, SIL, MHG)
 //
 //  LIVE SESSION TRACKING — from the routine's window start on the plan date
-//  (New York time, editable per routine) the loader follows the plan bar by bar:
+//  (New York time, editable per routine) the loader follows the plan bar by bar.
+//  Asia (18:00) is the last routine of its plan date and runs past midnight.
 //    WATCHING → IN ZONE → ENTRY FILLED → TP1 → TP2 → TP3
 //    Terminal outcomes: STOPPED, EXPIRED (no entry before window end),
 //    INVALIDATED (stop traded before entry), MISSED (TP1 traded before entry).
@@ -53,7 +54,7 @@ indicator("TradeOS Plan Loader", "TCC TradeOS", overlay = true, max_labels_count
 //  LUNCH are REJECTED as Plan Code identifiers (duplicates of LON and AMLUNCH).
 //
 //  CHANGE LOG
-//    2.0.0  2026-10-13  Three market groups (Index, Energy, Metals) with micro
+//    2.0.0  2026-10-13  Three market groups (Equity, Energy, Metals) with micro
 //                       guards; live session tracking state machine; routine
 //                       windows; live routine range; event markers; alerts.
 //    1.1.0  2026-08-14  Hardening: single Plan Code input; full field validation;
@@ -75,10 +76,10 @@ grpK = "Live session tracking (New York time)"
 trackOn = input.bool(true, "Track plan live", group = grpK)
 expireOn = input.bool(true, "Expire if no entry by window end", group = grpK)
 wAsia  = input.session("1800-0200", "Asia Session",        group = grpK)
-wLon   = input.session("0200-0700", "London Session",      group = grpK)
-wPre   = input.session("0700-0930", "Pre-Market Session",  group = grpK)
-wAM    = input.session("0930-1130", "New York AM Session", group = grpK)
-wLunch = input.session("1130-1330", "Lunch Session",       group = grpK)
+wLon   = input.session("0200-0730", "London Session",      group = grpK)
+wPre   = input.session("0730-0930", "Pre-Market Session",  group = grpK)
+wAM    = input.session("0930-1115", "New York AM Session", group = grpK)
+wLunch = input.session("1115-1230", "Lunch Session",       group = grpK)
 wPM    = input.session("1330-1500", "New York PM Session", group = grpK)
 wPH    = input.session("1500-1600", "Power Hour",          group = grpK)
 showMarks = input.bool(true, "Event markers on chart", group = grpK)
@@ -116,7 +117,7 @@ cInfo  = input.color(color.new(#2962FF, 0),  "Active bg",  group = grpT)
 
 // ── RECOGNISED VALUE SETS ────────────────────────────────────────────────────
 ROUTINES    = "ASIA|LON|PRE|AM|AMLUNCH|PM|PH"
-INSTRUMENTS = "NQ|ES|YM|RTY|CL|NG|GC|SI|HG"
+INSTRUMENTS = "NQ|ES|YM|CL|HO|RB|GC|SI|HG"
 VERDICTS    = "GO|CAUTION|STAND ASIDE"
 GRADES      = "A+|A|A-|B+|B|B-|C+|C|C-|D+|D|D-|F"
 DIRECTIONS  = "LONG|SHORT|STAND ASIDE"
@@ -126,11 +127,11 @@ f_routeName(string _r) =>
     _r == "ASIA" ? "Asia Session" : _r == "LON" ? "London Session" : _r == "PRE" ? "Pre-Market Session" : _r == "AM" ? "New York AM Session" : _r == "AMLUNCH" ? "Lunch Session" : _r == "PM" ? "New York PM Session" : _r == "PH" ? "Power Hour" : _r
 
 f_group(string _i) =>
-    _i == "NQ" or _i == "ES" or _i == "YM" or _i == "RTY" ? "Equity Index" : _i == "CL" or _i == "NG" ? "Energy" : _i == "GC" or _i == "SI" or _i == "HG" ? "Metals" : "?"
+    _i == "NQ" or _i == "ES" or _i == "YM" ? "Equity" : _i == "CL" or _i == "HO" or _i == "RB" ? "Energy" : _i == "GC" or _i == "SI" or _i == "HG" ? "Metals" : "?"
 
 // Smaller-contract roots accepted for each plan instrument when allowMicro is on.
 f_micros(string _i) =>
-    _i == "NQ" ? "MNQ" : _i == "ES" ? "MES" : _i == "YM" ? "MYM" : _i == "RTY" ? "M2K" : _i == "CL" ? "MCL|QM" : _i == "NG" ? "MNG|QG" : _i == "GC" ? "MGC" : _i == "SI" ? "SIL" : _i == "HG" ? "MHG" : ""
+    _i == "NQ" ? "MNQ" : _i == "ES" ? "MES" : _i == "YM" ? "MYM" : _i == "CL" ? "MCL|QM" : _i == "GC" ? "MGC" : _i == "SI" ? "SIL" : _i == "HG" ? "MHG" : ""
 
 f_win(string _r) =>
     _r == "ASIA" ? wAsia : _r == "LON" ? wLon : _r == "PRE" ? wPre : _r == "AM" ? wAM : _r == "AMLUNCH" ? wLunch : _r == "PM" ? wPM : wPH
@@ -265,7 +266,7 @@ bool   symMatch = not valid or symRoot == pInst or (allowMicro and f_inList(symR
 
 // ── ROUTINE WINDOW ───────────────────────────────────────────────────────────
 // Window is read in New York time on the plan date. A window whose start is at or
-// after its end (Asia, 1800-0200) begins on the previous calendar day.
+// after its end (Asia, 1800-0200) starts on the plan date and ends the next day.
 f_hm(string _s, int _off) =>
     int(str.tonumber(str.substring(_s, _off, _off + 2)))
 
@@ -281,7 +282,7 @@ f_window(string _r, string _d) =>
     int st = timestamp(NY_TZ, y, mo, dy, sh, sm)
     int en = timestamp(NY_TZ, y, mo, dy, eh, em)
     if sh * 60 + sm >= eh * 60 + em
-        st -= 86400000
+        en += 86400000
     [st, en]
 
 string safeRout = valid ? pRout : "AM"

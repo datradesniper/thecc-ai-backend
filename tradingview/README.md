@@ -51,7 +51,7 @@ TCC1|2026-10-13|AMLUNCH|CL|GO|A|LONG|93.09|93.34|93.22|92.59|94|94.36|94.8|93.76
 **Each session:** Settings → paste into **TradeOS Plan Code** → **press Enter** → **OK**.
 
 What's new in v2.0.0:
-- **Three market groups:** Equity Index (NQ, ES, YM, RTY), Energy (CL, NG) and Metals (GC, SI, HG). The micro and mini contracts are accepted too.
+- **Three market groups:** Equity (NQ, ES, YM), Energy (CL, HO, RB) and Metals (GC, SI, HG). The micro and mini contracts are accepted too.
 - **Live session tracking:** from the start of the routine window (New York time, editable), the status table moves through Watching → In Zone → Entry Filled → TP1 → TP2 → TP3, or ends at Stopped, Expired, Invalidated or Missed.
 - **Alerts:** one fixed alert for each event, plus detailed `alert()` messages that carry the price levels. To get those, choose *Any alert() function call* when you create the alert.
 
