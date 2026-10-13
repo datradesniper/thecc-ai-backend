@@ -55,6 +55,8 @@ indicator("TradeOS Plan Loader", "TCC TradeOS", overlay = true, max_labels_count
 //
 //  CHANGE LOG
 //    2.0.2  2026-10-13  Accept grade NA (ungraded / NO-TRADE plans from TradeOS).
+//                       Zone-only LONG/SHORT plans (entry NA) load and fill on the
+//                       zone edge; TP2 / TP3 optional. Needs entry or zone, stop, TP1.
 //    2.0.0  2026-10-13  Three market groups (Equity, Energy, Metals) with micro
 //                       guards; live session tracking state machine; routine
 //                       windows; live routine range; event markers; alerts.
@@ -314,12 +316,15 @@ f_reason() =>
         else
             string d = str.upper(f_str(6))
             if d == "LONG" or d == "SHORT"
-                int miss = -1
-                for j = 9 to 13
-                    if miss == -1 and na(f_num(j))
-                        miss := j
-                if miss >= 0
-                    r := d + " plan missing " + f_fname(miss)
+                // Entry may be NA when the plan gives only a zone (the zone is then the entry).
+                // TP2 / TP3 are optional; whatever levels exist are drawn and tracked.
+                bool hasZone = not na(f_num(7)) and not na(f_num(8))
+                if na(f_num(9)) and not hasZone
+                    r := d + " plan missing entry and zone"
+                else if na(f_num(10))
+                    r := d + " plan missing stop"
+                else if na(f_num(11))
+                    r := d + " plan missing TP1"
     r
 
 string failReason = hasIn ? f_reason() : ""
@@ -405,7 +410,10 @@ f_dn(float _lvl) =>
     not na(_lvl) and low <= _lvl
 
 bool zoneHit  = not na(vZoneLo) and not na(vZoneHi) and low <= math.max(vZoneLo, vZoneHi) and high >= math.min(vZoneLo, vZoneHi)
-bool entryHit = f_touch(vEntry, pc)
+// Fill level: the entry, or for a zone-only plan the zone edge price reaches first
+// (top of the zone for a LONG, bottom for a SHORT).
+float vFill   = not na(vEntry) ? vEntry : na(vZoneLo) or na(vZoneHi) ? na : pDir == "LONG" ? math.max(vZoneLo, vZoneHi) : math.min(vZoneLo, vZoneHi)
+bool entryHit = f_touch(vFill, pc)
 bool stopHit  = isLong ? f_dn(vStop) : f_up(vStop)
 bool tp1Hit   = isLong ? f_up(vTP1)  : f_dn(vTP1)
 bool tp2Hit   = isLong ? f_up(vTP2)  : f_dn(vTP2)
@@ -487,7 +495,7 @@ plot(drawNow and showSH    ? vSHigh : na, "Session High", color = cSH, linewidth
 plot(drawNow and showSM    ? vSMid  : na, "Session Mid",  color = cSM, linewidth = wSM, style = stSM)
 plot(drawNow and showSL    ? vSLow  : na, "Session Low",  color = cSL, linewidth = wSL, style = stSL)
 
-plotshape(showMarks and mkEntry and evEntry ? vEntry : na, "Entry filled", shape.diamond, location.absolute, cEntry, size = size.small)
+plotshape(showMarks and mkEntry and evEntry ? vFill : na, "Entry filled", shape.diamond, location.absolute, cEntry, size = size.small)
 plotshape(showMarks and mkStop  and evStop  ? vStop  : na, "Stop hit",     shape.xcross,  location.absolute, cStop,  size = size.small)
 plotshape(showMarks and mkTPs   and evTP1   ? vTP1   : na, "TP1 hit",      shape.circle,  location.absolute, cTP1,   size = size.tiny)
 plotshape(showMarks and mkTPs   and evTP2   ? vTP2   : na, "TP2 hit",      shape.circle,  location.absolute, cTP2,   size = size.tiny)
@@ -577,7 +585,7 @@ if barstate.islast
                 f_row(r, "Direction", pDir)
                 r += 1
             if rLvls
-                f_row(r, "Entry", f_fmt(vEntry))
+                f_row(r, "Entry", na(vEntry) and not na(vFill) ? "ZONE (" + f_fmt(vFill) + ")" : f_fmt(vEntry))
                 f_row(r + 1, "Entry zone", f_fmt(vZoneLo) + " – " + f_fmt(vZoneHi))
                 f_row(r + 2, "Stop", f_fmt(vStop))
                 r += 3
@@ -625,7 +633,7 @@ if alertDyn and trackable
     if evZone
         alert(hdr + "ENTRY ZONE reached " + f_fmt(vZoneLo) + " – " + f_fmt(vZoneHi), alert.freq_once_per_bar)
     if evEntry
-        alert(hdr + "ENTRY filled " + f_fmt(vEntry) + " | Stop " + f_fmt(vStop) + " | TP1 " + f_fmt(vTP1), alert.freq_once_per_bar)
+        alert(hdr + "ENTRY filled " + f_fmt(vFill) + " | Stop " + f_fmt(vStop) + " | TP1 " + f_fmt(vTP1), alert.freq_once_per_bar)
     if evStop
         alert(hdr + "STOP hit " + f_fmt(vStop), alert.freq_once_per_bar)
     if evTP1

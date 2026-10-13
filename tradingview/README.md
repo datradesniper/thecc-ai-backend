@@ -55,6 +55,6 @@ What's new in v2.0.0:
 - **Live session tracking:** from the start of the routine window (New York time, editable), the status table moves through Watching → In Zone → Entry Filled → TP1 → TP2 → TP3, or ends at Stopped, Expired, Invalidated or Missed.
 - **Alerts:** one fixed alert for each event, plus detailed `alert()` messages that carry the price levels. To get those, choose *Any alert() function call* when you create the alert.
 
-v2.0.2 also accepts the grade `NA`, which TradeOS sends for ungraded and NO-TRADE plans.
+v2.0.2 also accepts the grade `NA` (ungraded and NO-TRADE plans) and zone-only LONG/SHORT plans with no single entry; those fill when price reaches the zone. TP2 and TP3 are optional.
 
 The Plan Code format and the input title haven't changed, so a plan saved in v1.x still loads.
