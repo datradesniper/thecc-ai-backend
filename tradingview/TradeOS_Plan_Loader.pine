@@ -4,7 +4,7 @@ indicator("TradeOS Plan Loader", "TCC TradeOS", overlay = true, max_labels_count
 // ═══════════════════════════════════════════════════════════════════════════════
 //  THE CONSISTENCY COLLECTIVE  —  TCC TradeOS Plan Loader
 //  Indicator ID .... THECC-0027 (RESERVED — not yet published to the registry)
-//  Version ......... 2.0.0        Internal Build .... 2.0.0-b001
+//  Version ......... 2.0.2        Internal Build .... 2.0.2-b001
 //  Pine Version .... 6            Edition ........... Student
 //  Status .......... Production Candidate
 //  Build Date ...... 2026-10-13
@@ -54,6 +54,7 @@ indicator("TradeOS Plan Loader", "TCC TradeOS", overlay = true, max_labels_count
 //  LUNCH are REJECTED as Plan Code identifiers (duplicates of LON and AMLUNCH).
 //
 //  CHANGE LOG
+//    2.0.2  2026-10-13  Accept grade NA (ungraded / NO-TRADE plans from TradeOS).
 //    2.0.0  2026-10-13  Three market groups (Equity, Energy, Metals) with micro
 //                       guards; live session tracking state machine; routine
 //                       windows; live routine range; event markers; alerts.
@@ -119,7 +120,7 @@ cInfo  = input.color(color.new(#2962FF, 0),  "Active bg",  group = grpT)
 ROUTINES    = "ASIA|LON|PRE|AM|AMLUNCH|PM|PH"
 INSTRUMENTS = "NQ|ES|YM|CL|HO|RB|GC|SI|HG"
 VERDICTS    = "GO|CAUTION|STAND ASIDE"
-GRADES      = "A+|A|A-|B+|B|B-|C+|C|C-|D+|D|D-|F"
+GRADES      = "A+|A|A-|B+|B|B-|C+|C|C-|D+|D|D-|F|NA"
 DIRECTIONS  = "LONG|SHORT|STAND ASIDE"
 NY_TZ       = "America/New_York"
 

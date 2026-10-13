@@ -39,7 +39,7 @@ Alerts: THECC Buy, THECC Sell, Take Profit Hit, Stop Loss Hit, plus all of the o
 
 ---
 
-# TCC TradeOS Plan Loader v2.0.0
+# TCC TradeOS Plan Loader v2.0.2
 
 `TradeOS_Plan_Loader.pine` draws a TradeOS plan on the chart from one Plan Code, for example:
 
@@ -54,5 +54,7 @@ What's new in v2.0.0:
 - **Three market groups:** Equity (NQ, ES, YM), Energy (CL, HO, RB) and Metals (GC, SI, HG). The micro and mini contracts are accepted too.
 - **Live session tracking:** from the start of the routine window (New York time, editable), the status table moves through Watching → In Zone → Entry Filled → TP1 → TP2 → TP3, or ends at Stopped, Expired, Invalidated or Missed.
 - **Alerts:** one fixed alert for each event, plus detailed `alert()` messages that carry the price levels. To get those, choose *Any alert() function call* when you create the alert.
+
+v2.0.2 also accepts the grade `NA`, which TradeOS sends for ungraded and NO-TRADE plans.
 
 The Plan Code format and the input title haven't changed, so a plan saved in v1.x still loads.
